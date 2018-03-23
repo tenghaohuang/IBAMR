@@ -297,6 +297,8 @@ public:
 
     void interpolatePressureForTraction(int p_data_idx, double data_time, unsigned int part = 0);
 
+    void computeVolandCOMOfStructure(libMesh::EquationSystems* solid_equation_systems);
+
     /*!
      * Advance the positions of the Lagrangian structure using the forward Euler
      * method.
@@ -627,6 +629,9 @@ protected:
     std::vector<libMesh::QuadratureType> d_default_quad_type;
     std::vector<libMesh::Order> d_default_quad_order;
     bool d_use_consistent_mass_matrix;
+    std::vector<IBTK::Vector3d> d_center_of_mass_solid_current, d_center_of_mass_solid_new;
+    std::vector<double> d_vol_solid_new;
+    std::vector<double> d_vol_solid_current;
 
     /*
      * Functions used to compute the initial coordinates of the Lagrangian mesh.
