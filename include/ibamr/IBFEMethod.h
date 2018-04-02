@@ -297,7 +297,9 @@ public:
 
     void interpolatePressureForTraction(int p_data_idx, double data_time, unsigned int part = 0);
 
-    void computeVolandCOMOfStructure(libMesh::EquationSystems* solid_equation_systems);
+    //~ void computeVolandCOMOfStructure(libMesh::EquationSystems* solid_equation_systems);
+    //~ void computeMOIOfStructure(EquationSystems* solid_equation_systems);
+
 
     /*!
      * Advance the positions of the Lagrangian structure using the forward Euler
@@ -358,7 +360,26 @@ public:
     /*!
      * Initialize the FE equation systems objects.  This method must be called
      * prior to calling initializeFEData().
+*/
+
+
+    /*!
+     * \brief Register any preprocess fluid solve callback functions.
      */
+    inline void registerPreProcessSolveFluidEquationsCallBackFunction(
+        void (*ptr_preprocess_callbackfnc)(const double, const double, const int, void*),
+        void* ctx)
+    {
+        d_prefluidsolve_callback_fns.push_back(ptr_preprocess_callbackfnc);
+        d_prefluidsolve_callback_fns_ctx.push_back(ctx);
+        return;
+    }
+
+    /*!
+     * \brief Calculate any body forces for INS solver over here.
+     */
+    virtual void preprocessSolveFluidEquations(double current_time, double new_time, int cycle_num);
+
     void initializeFEEquationSystems();
 
     /*!
@@ -629,9 +650,9 @@ protected:
     std::vector<libMesh::QuadratureType> d_default_quad_type;
     std::vector<libMesh::Order> d_default_quad_order;
     bool d_use_consistent_mass_matrix;
-    std::vector<IBTK::Vector3d> d_center_of_mass_solid_current, d_center_of_mass_solid_new;
-    std::vector<double> d_vol_solid_new;
-    std::vector<double> d_vol_solid_current;
+    //~ std::vector<IBTK::Vector3d> d_center_of_mass_solid_current, d_center_of_mass_solid_new;
+    //~ std::vector<double> d_vol_solid_new;
+    //~ std::vector<double> d_vol_solid_current;
 
     /*
      * Functions used to compute the initial coordinates of the Lagrangian mesh.
@@ -721,6 +742,12 @@ private:
      * members.
      */
     void getFromRestart();
+    
+   std::vector<void (*)(const double, const double, const int, void*)> d_prefluidsolve_callback_fns;
+    std::vector<void*> d_prefluidsolve_callback_fns_ctx;
+    
+    
+    
 };
 } // namespace IBAMR
 
