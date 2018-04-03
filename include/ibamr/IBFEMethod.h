@@ -363,22 +363,11 @@ public:
 */
 
 
-    /*!
-     * \brief Register any preprocess fluid solve callback functions.
-     */
-    inline void registerPreProcessSolveFluidEquationsCallBackFunction(
-        void (*ptr_preprocess_callbackfnc)(const double, const double, const int, void*),
-        void* ctx)
-    {
-        d_prefluidsolve_callback_fns.push_back(ptr_preprocess_callbackfnc);
-        d_prefluidsolve_callback_fns_ctx.push_back(ctx);
-        return;
-    }
+
 
     /*!
      * \brief Calculate any body forces for INS solver over here.
      */
-    virtual void preprocessSolveFluidEquations(double current_time, double new_time, int cycle_num);
 
     void initializeFEEquationSystems();
 

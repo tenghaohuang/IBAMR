@@ -1,26 +1,29 @@
-// physical parameters
-Re = 400.0
-MU = 1.0/Re
-RHO = 1.0
+R  = 0.3125
+MU = 0.05       // the viscosity required to attain the specified Reynolds number
+RHO = 2.0
 
 // grid spacing parameters
-L = 16.0                                       // width of computational domain
-MAX_LEVELS = 6                                 // maximum number of levels in locally refined grid
-REF_RATIO  = 2                                 // refinement ratio between levels
-N = 16                                         // actual    number of grid cells on coarsest grid level
-NFINEST = (REF_RATIO^(MAX_LEVELS - 1))*N       // effective number of grid cells on finest   grid level
+// grid spacing parameters
+MAX_LEVELS = 5                            // maximum number of levels in locally refined grid
+REF_RATIO  = 2                            // refinement ratio between levels
+N = 16                                    // actual    number of grid cells on coarsest grid level
+NFINEST = (REF_RATIO^(MAX_LEVELS - 1))*N  // effective number of grid cells on finest   grid level
+L = 16.0                                  // width of computational domain
+
 DX0 = L/N                                      // mesh width on coarsest grid level
 DX  = L/NFINEST                                // mesh width on finest   grid level
-MFAC = 8.0                                     // ratio of Lagrangian mesh width to Cartesian mesh width
-ELEM_TYPE = "HEX27"                            // type of element to use for structure discretization
-PK1_DEV_QUAD_ORDER = "SEVENTH"
-PK1_DIL_QUAD_ORDER = "FIFTH"
+MFAC = 2.0                                     // ratio of Lagrangian mesh width to Cartesian mesh width
+ELEM_TYPE = "HEX8"                            // type of element to use for structure discretization
 USE_BOUNDARY_MESH = TRUE
 
 // solver parameters
 IB_DELTA_FUNCTION          = "IB_4"            // the type of smoothed delta function to use for Lagrangian-Eulerian interaction
-SPLIT_FORCES               = FALSE             // whether to split interior and boundary forces
+SPLIT_NORMAL_FORCES        = FALSE             // whether to split interior and boundary forces
+SPLIT_TANGENTIAL_FORCES   =  FALSE
+VEL_INTERP_WIDTH           = 0.0
 USE_JUMP_CONDITIONS        = FALSE             // whether to impose pressure jumps at fluid-structure interfaces
+USE_HIGHER_ORDER_JUMP	   = FALSE
+MODIFY_VEL_INTERP_JUMPS    = FALSE
 USE_CONSISTENT_MASS_MATRIX = TRUE              // whether to use a consistent or lumped mass matrix
 IB_POINT_DENSITY           = 4.0               // approximate density of IB quadrature points for Lagrangian-Eulerian interaction
 SOLVER_TYPE                = "STAGGERED"       // the fluid solver to use (STAGGERED or COLLOCATED)
@@ -53,66 +56,17 @@ PROJECTION_METHOD_TYPE = "PRESSURE_UPDATE"
 SECOND_ORDER_PRESSURE_UPDATE = TRUE
 
 VelocityBcCoefs_0 {
-   t_half = 0.5
-   tau = 0.125
-
    acoef_function_0 = "1.0"
-   acoef_function_1 = "0.0"
-   acoef_function_2 = "0.0"
-   acoef_function_3 = "0.0"
-   acoef_function_4 = "0.0"
-   acoef_function_5 = "0.0"
-
-   bcoef_function_0 = "0.0"
-   bcoef_function_1 = "1.0"
-   bcoef_function_2 = "1.0"
-   bcoef_function_3 = "1.0"
-   bcoef_function_4 = "1.0"
-   bcoef_function_5 = "1.0"
-
-   gcoef_function_0 = "(tanh((t-t_half)/tau)+tanh(t_half/tau))/(1+tanh(t_half/tau))"
-   gcoef_function_1 = "0.0"
-   gcoef_function_2 = "0.0"
-   gcoef_function_3 = "0.0"
-   gcoef_function_4 = "0.0"
-   gcoef_function_5 = "0.0"
-}
-
-VelocityBcCoefs_1 {
-   acoef_function_0 = "1.0"
-   acoef_function_1 = "0.0"
+   acoef_function_1 = "1.0"
    acoef_function_2 = "1.0"
    acoef_function_3 = "1.0"
-   acoef_function_4 = "0.0"
-   acoef_function_5 = "0.0"
-
-   bcoef_function_0 = "0.0"
-   bcoef_function_1 = "1.0"
-   bcoef_function_2 = "0.0"
-   bcoef_function_3 = "0.0"
-   bcoef_function_4 = "1.0"
-   bcoef_function_5 = "1.0"
-
-   gcoef_function_0 = "cos(pi*X_1/16.0)*exp(-2.0*t)"
-   gcoef_function_1 = "0.0"
-   gcoef_function_2 = "0.0"
-   gcoef_function_3 = "0.0"
-   gcoef_function_4 = "0.0"
-   gcoef_function_5 = "0.0"
-}
-
-VelocityBcCoefs_2 {
-   acoef_function_0 = "1.0"
-   acoef_function_1 = "0.0"
-   acoef_function_2 = "0.0"
-   acoef_function_3 = "0.0"
    acoef_function_4 = "1.0"
    acoef_function_5 = "1.0"
 
    bcoef_function_0 = "0.0"
-   bcoef_function_1 = "1.0"
-   bcoef_function_2 = "1.0"
-   bcoef_function_3 = "1.0"
+   bcoef_function_1 = "0.0"
+   bcoef_function_2 = "0.0"
+   bcoef_function_3 = "0.0"
    bcoef_function_4 = "0.0"
    bcoef_function_5 = "0.0"
 
@@ -123,6 +77,53 @@ VelocityBcCoefs_2 {
    gcoef_function_4 = "0.0"
    gcoef_function_5 = "0.0"
 }
+
+VelocityBcCoefs_1 {
+   acoef_function_0 = "1.0"
+   acoef_function_1 = "1.0"
+   acoef_function_2 = "1.0"
+   acoef_function_3 = "1.0"
+   acoef_function_4 = "1.0"
+   acoef_function_5 = "1.0"
+
+   bcoef_function_0 = "0.0"
+   bcoef_function_1 = "0.0"
+   bcoef_function_2 = "0.0"
+   bcoef_function_3 = "0.0"
+   bcoef_function_4 = "0.0"
+   bcoef_function_5 = "0.0"
+
+   gcoef_function_0 = "0.0"
+   gcoef_function_1 = "0.0"
+   gcoef_function_2 = "0.0"
+   gcoef_function_3 = "0.0"
+   gcoef_function_4 = "0.0"
+   gcoef_function_5 = "0.0"
+}
+
+VelocityBcCoefs_2 {
+   acoef_function_0 = "1.0"
+   acoef_function_1 = "1.0"
+   acoef_function_2 = "1.0"
+   acoef_function_3 = "1.0"
+   acoef_function_4 = "1.0"
+   acoef_function_5 = "1.0"
+
+   bcoef_function_0 = "0.0"
+   bcoef_function_1 = "0.0"
+   bcoef_function_2 = "0.0"
+   bcoef_function_3 = "0.0"
+   bcoef_function_4 = "0.0"
+   bcoef_function_5 = "0.0"
+
+   gcoef_function_0 = "0.0"
+   gcoef_function_1 = "0.0"
+   gcoef_function_2 = "0.0"
+   gcoef_function_3 = "0.0"
+   gcoef_function_4 = "0.0"
+   gcoef_function_5 = "0.0"
+}
+
 
 IBHierarchyIntegrator {
    start_time          = START_TIME
@@ -136,8 +137,12 @@ IBHierarchyIntegrator {
 
 IBFEMethod {
    IB_delta_fcn                = IB_DELTA_FUNCTION
-   split_forces                = SPLIT_FORCES
+   split_normal_force          = SPLIT_NORMAL_FORCES
+   split_tangential_force	   = SPLIT_TANGENTIAL_FORCES
    use_jump_conditions         = USE_JUMP_CONDITIONS
+   use_higher_order_jump		= USE_HIGHER_ORDER_JUMP
+   vel_interp_width            = VEL_INTERP_WIDTH
+   modify_vel_interp_jumps     = MODIFY_VEL_INTERP_JUMPS
    use_consistent_mass_matrix  = USE_CONSISTENT_MASS_MATRIX
    IB_point_density            = IB_POINT_DENSITY
 }
@@ -216,10 +221,10 @@ Main {
 }
 
 CartesianGeometry {
-   domain_boxes = [ (0,0,0),(2*N - 1,N - 1,N - 1) ]
-   x_lo = -0.5*L,-0.5*L,-0.5*L
-   x_up =  1.5*L, 0.5*L, 0.5*L
-   periodic_dimension = 0,0,0
+   domain_boxes = [ (0,0,0) , ( 7, 31, 7) ]
+   x_lo         =  -1.0,  -7.0, -1.0           // lower end of computational domain.
+   x_up         =   1.0,   1.0,  1.0           // upper end of computational domain.
+   periodic_dimension = 0, 0, 0
 }
 
 GriddingAlgorithm {
@@ -232,7 +237,8 @@ GriddingAlgorithm {
       level_5 = REF_RATIO,REF_RATIO,REF_RATIO
    }
    largest_patch_size {
-      level_0 = 512,512,512  // all finer levels will use same values as level_0
+      level_0 = 64, 64, 64 // largest patch allowed in hierarchy
+                          // all finer levels will use same values as level_0...
    }
    smallest_patch_size {
       level_0 =   8,  8,  8  // all finer levels will use same values as level_0

@@ -73,8 +73,6 @@
 // Set up application namespace declarations
 #include <ibamr/app_namespaces.h>
 
-#include "CartGridBodyForce.h"
-#include "ForceProjector.h"
 
 // Elasticity model data.
 namespace ModelData
@@ -456,7 +454,7 @@ void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body 
         {
 
 			 for (int d = 0; d < 3; ++d)
-				F_g(d) = rho * grav_const[d] * JxW[qp];
+				F_g(d) = 0.5 * rho * grav_const[d] * JxW[qp];
             
 
         }
@@ -816,7 +814,7 @@ bool run_example(int argc, char* argv[])
 
         //~ const double grav_const =input_db->getDouble("RHO");
 
-        const double R = 0.5;
+        const double R = input_db->getDouble("R");
         if (NDIM == 2 && (elem_type == "TRI3" || elem_type == "TRI6"))
         {
 #ifdef LIBMESH_HAVE_TRIANGLE
@@ -1267,7 +1265,6 @@ bool run_example(int argc, char* argv[])
 
             dt = time_integrator->getMaximumTimeStepSize();
             time_integrator->advanceHierarchy(dt);
-            
             
         //****************************** RBD code **************************************//
 	
