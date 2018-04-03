@@ -5637,7 +5637,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 		VecGetArray(X_local_vec, &X_local_soln);
 		AutoPtr<NumericVector<double> > U_rhs_vec = (*U_vec).zero_clone();
 		(*U_rhs_vec).zero();
-		DenseVector<double> U_rhs_e[n_vars];
+		DenseVector<double> U_rhs_e[NDIM];
 		boost::multi_array<double, 2> X_node;
 		boost::multi_array<double, 2> du_j_node, dv_j_node, dw_j_node;
                 std::vector<double> U_qp, X_qp, X_qp_m, X_qp_p, X_qp_mm, X_qp_pp;
