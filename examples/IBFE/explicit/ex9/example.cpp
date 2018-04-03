@@ -73,11 +73,9 @@
 // Set up application namespace declarations
 #include <ibamr/app_namespaces.h>
 
-
 // Elasticity model data.
 namespace ModelData
 {
-// Tether (penalty) force functions.
 static double kappa_s = 1.0e6;
 static double eta_s = 0.0;
 static double grav_const[3]={0.0,-9.81,0.0};
@@ -142,22 +140,22 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
 										TensorValue<double>& I_w_new,  // moment of inertia tensor
 										VectorValue<double>& x_com_current,        // current center of the mass
 										VectorValue<double>& x_com_new,        // new center of the mass
-										Mesh& mesh,
-										const double rho)                   // mass density of the body (assumed to be uniform)
+										const double rho,
+										EquationSystems* solid_equation_systems)                  // mass density of the body (assumed to be uniform)
 										//~ libMesh::UniquePtr<EquationSystems> solid_equation_systems)
 {
     // Get the structure mesh for codim-0 solid.
     // For now the eqs are setup only for one part but this will be extended
     // to multiple parts
     
-    //~ MeshBase& mesh = solid_equation_systems->get_mesh();
+    MeshBase& mesh = solid_equation_systems->get_mesh();
     const unsigned int dim = mesh.mesh_dimension();
 
     AutoPtr<QBase> qrule = QBase::build(QGAUSS, dim, SEVENTH);
  
 
     // Extract the FE system and DOF map, and setup the FE object.
-    //~ System& X_new_system = solid_equation_systems->get_system("position_new");
+    System& X_new_system = solid_equation_systems->get_system("position_new");
     x_new_solid_system->solution->localize(*x_new_solid_system->current_local_solution);
  
     DofMap& X_new_dof_map = x_new_solid_system->get_dof_map();
@@ -181,7 +179,7 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
     
     
     
-    //~ System& x_current_system = solid_equation_systems->get_system("position_current");
+    System& x_current_system = solid_equation_systems->get_system("position_current");
     x_current_solid_system->solution->localize(*x_current_solid_system->current_local_solution);
     DofMap& X_current_dof_map = x_current_solid_system->get_dof_map();
     std::vector<std::vector<unsigned int> > X_current_dof_indices(NDIM);
@@ -408,15 +406,17 @@ void calculateFluidForceAndTorque(VectorValue<double>& F,              // net fo
 
 void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body force
 								 const double rho,        // mass density of the body (assumed to be uniform)
-								 Mesh& mesh)
+								 EquationSystems* solid_equation_systems)  
 {
+	
+	MeshBase& mesh = solid_equation_systems->get_mesh();
     const unsigned int dim = mesh.mesh_dimension();
 
     AutoPtr<QBase> qrule = QBase::build(QGAUSS, dim, SEVENTH);
 
 
     // Extract the FE system and DOF map, and setup the FE object.
-    //~ System& X_half_system = solid_equation_systems->get_system("position_half");
+    System& X_half_system = solid_equation_systems->get_system("position_half");
 
 
     x_half_solid_system->solution->localize(*x_half_solid_system->current_local_solution);
@@ -538,144 +538,187 @@ void Solve6DOFSystemofEquations(const double dt,
 void updateLagrangianVelocityOfQuadPoints(VectorValue<double> x_com,
 										  VectorValue<double> V,              // linear velocity of the body
 										  VectorValue<double> W,              // angular velocity of the body
-										  Mesh& mesh)
+										  const double loop_time,
+										  EquationSystems* solid_equation_systems)
 {
 	
 	
-    const unsigned int dim = mesh.mesh_dimension();
-     AutoPtr<QBase> qrule = QBase::build(QGAUSS, dim, SEVENTH);
+                DenseVector<double> U(NDIM);
+                U(1) = -0.25;
+                MeshBase& mesh = solid_equation_systems->get_mesh();
+                System& X_system = solid_equation_systems->get_system("position_new");
+                const unsigned int X_sys_num = X_system.number();
+                NumericVector<double>& X_coords = *X_system.solution;
+                System& U_system = solid_equation_systems->get_system("velocity_new");
+                const unsigned int U_sys_num = U_system.number();
+                NumericVector<double>& U_coords = *U_system.solution;
+
+
+                for (MeshBase::node_iterator it = mesh.local_nodes_begin(); it != mesh.local_nodes_end(); ++it)
+                {
+                    Node* n = *it;
+                    if (n->n_vars(X_sys_num))
+                    {
+                        TBOX_ASSERT(n->n_vars(X_sys_num) == NDIM);
+                        const libMesh::Point& X = *n;
+                        for (unsigned int d = 0; d < NDIM; ++d)
+                        {
+                            const int dof_index = n->dof_number(U_sys_num, d, 0);
+                            X_coords.set(dof_index, X(d) + loop_time * U(d));
+                            U_coords.set(dof_index, U(d));
+                        }
+                    }
+                }
+                X_coords.close();
+                X_system.get_dof_map().enforce_constraints_exactly(X_system, &X_coords);
+                X_system.solution->localize(*X_system.current_local_solution);
+                U_coords.close();
+                U_system.get_dof_map().enforce_constraints_exactly(U_system, &U_coords);
+                U_system.solution->localize(*U_system.current_local_solution);
+       
+
+    //~ PetscVector<double>& X_new_petsc = dynamic_cast<PetscVector<double>&>(*x_new_solid_system->current_local_solution.get());
+    //~ X_new_petsc.close();
+    //~ Vec X_new_global_vec = X_new_petsc.vec();
+    //~ Vec X_new_local_ghost_vec;
+    //~ VecGhostGetLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
+    //~ double* X_new_local_ghost_soln;
+    //~ VecGetArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
+
+
+    //~ u_current_solid_system->solution->localize(*u_current_solid_system->current_local_solution);
+    //~ DofMap& U_current_dof_map = u_current_solid_system->get_dof_map();
+    //~ std::vector<std::vector<unsigned int> > U_current_dof_indices(NDIM); 
+    
+    //~ PetscVector<double>& u_new_petsc = dynamic_cast<PetscVector<double>&>(*u_new_solid_system->current_local_solution.get());
+
+    
+    //~ PetscVector<double>& U_current_petsc = dynamic_cast<PetscVector<double>&>(*u_current_solid_system->current_local_solution.get());
+    
+    
+    //~ Vec U_current_global_vec = U_current_petsc.vec();
+    //~ Vec U_current_local_ghost_vec;
+    //~ VecGhostGetLocalForm(U_current_global_vec, &U_current_local_ghost_vec);
+    //~ double* U_current_local_ghost_soln;
+    //~ VecGetArray(U_current_local_ghost_vec, &U_current_local_ghost_soln);  
+
+    
+    //~ VectorValue<double> R_qp, WxR, X_qp_new, U_qp_current;
+
+	//~ R_qp.zero();
+	//~ WxR.zero();
+	//~ U_qp_current.zero();
+	//~ X_qp_new.zero();
+	//~ DenseVector<double> U_e(NDIM);
+	//~ U_e(0) = U_e(2) = 0.0;
+	//~ U_e(1) = -0.5;
 	
-    const unsigned int U_new_sys_num = u_new_solid_system->number();
-    NumericVector<double>& u_new_vec = *u_new_solid_system->solution;
-	DofMap& U_new_dof_map = u_new_solid_system->get_dof_map();
-    std::vector<std::vector<unsigned int> > U_new_dof_indices(NDIM);
-
-    x_new_solid_system->solution->localize(*x_new_solid_system->current_local_solution);
-    DofMap& X_new_dof_map = x_new_solid_system->get_dof_map();
-    std::vector<std::vector<unsigned int> > X_new_dof_indices(NDIM);
-    FEType fe_type = X_new_dof_map.variable_type(0);
-
-
-    UniquePtr<FEBase> fe(FEBase::build(dim, fe_type));
-    fe->attach_quadrature_rule(qrule.get());
-    const std::vector<double>& JxW = fe->get_JxW();
-    const std::vector<std::vector<double> >& phi = fe->get_phi();
-
-    PetscVector<double>& X_new_petsc = dynamic_cast<PetscVector<double>&>(*x_new_solid_system->current_local_solution.get());
-    X_new_petsc.close();
-    Vec X_new_global_vec = X_new_petsc.vec();
-    Vec X_new_local_ghost_vec;
-    VecGhostGetLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
-    double* X_new_local_ghost_soln;
-    VecGetArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
-
-
-    u_current_solid_system->solution->localize(*u_current_solid_system->current_local_solution);
-    DofMap& U_current_dof_map = u_current_solid_system->get_dof_map();
-    std::vector<std::vector<unsigned int> > U_current_dof_indices(NDIM); 
-    
-    
-    PetscVector<double>& U_current_petsc = dynamic_cast<PetscVector<double>&>(*u_current_solid_system->current_local_solution.get());
-    
-    
-    Vec U_current_global_vec = U_current_petsc.vec();
-    Vec U_current_local_ghost_vec;
-    VecGhostGetLocalForm(U_current_global_vec, &U_current_local_ghost_vec);
-    double* U_current_local_ghost_soln;
-    VecGetArray(U_current_local_ghost_vec, &U_current_local_ghost_soln);  
-
-    
-    VectorValue<double> R_qp, WxR, X_qp_new, U_qp_current;
-
-	R_qp.zero();
-	WxR.zero();
-	U_qp_current.zero();
-	X_qp_new.zero();
-	DenseVector<double> U_e[NDIM];
+	//~ VecCopy(u_new_petsc.vec(), U_current_petsc.vec());
 
 
     
-    boost::multi_array<double, 2> X_new_node, U_current_node;
-    const MeshBase::const_element_iterator el_begin = mesh.active_local_elements_begin();
-    const MeshBase::const_element_iterator el_end = mesh.active_local_elements_end();
-    for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
-    {
+    //~ boost::multi_array<double, 2> X_new_node, U_current_node;
+    //~ const MeshBase::const_element_iterator el_begin = mesh.active_local_elements_begin();
+    //~ const MeshBase::const_element_iterator el_end = mesh.active_local_elements_end();
+    //~ for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
+    //~ {
+    //~ for (MeshBase::node_iterator it = mesh.local_nodes_begin(); it != mesh.local_nodes_end(); ++it)
+    //~ {
 		
-		const Elem* const elem = *el_it;
-        fe->reinit(elem);
-        for (unsigned int d = 0; d < NDIM; ++d)
-        {
-            X_new_dof_map.dof_indices(elem, X_new_dof_indices[d], d);
-            U_current_dof_map.dof_indices(elem, U_current_dof_indices[d], d);
-            U_new_dof_map.dof_indices(elem, U_new_dof_indices[d], d);
+		
+		//~ Node* n = *it;
+    
+ 
+            //~ const libMesh::Point& X = *n;
+            //~ for (unsigned int d = 0; d < NDIM; ++d)
+            //~ {
+                 //~ const int dof_index = n->dof_number(U_new_sys_num, d, 0);
+                 //~ u_new_petsc.set(dof_index, U_e(d));
+            //~ }
+        
+		
+		//~ const Elem* const elem = *el_it;
+        //~ fe->reinit(elem);
+        //~ for (unsigned int d = 0; d < NDIM; ++d)
+        //~ {
+            //~ X_new_dof_map.dof_indices(elem, X_new_dof_indices[d], d);
+            //~ U_current_dof_map.dof_indices(elem, U_current_dof_indices[d], d);
+            //~ U_new_dof_map.dof_indices(elem, U_new_dof_indices[d], d);
 
 
             //~ X_current_dof_map.dof_indices(elem, X_current_dof_indices[d], d);
-        }
-        get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_new_dof_indices);
-        get_values_for_interpolation(U_current_node, U_current_petsc, U_current_local_ghost_soln, U_current_dof_indices);
+        //~ }
+        //~ get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_new_dof_indices);
+        //~ get_values_for_interpolation(U_current_node, U_current_petsc, U_current_local_ghost_soln, U_current_dof_indices);
 
-        for (unsigned int d = 0; d < NDIM; ++d)
-        {
-			U_e[d].resize(static_cast<int>(U_new_dof_indices[d].size()));        //~ get_values_for_interpolation(
+        //~ for (unsigned int d = 0; d < NDIM; ++d)
+        //~ {
+			//~ U_e[d].resize(static_cast<int>(U_new_dof_indices[d].size()));        //~ get_values_for_interpolation(
 
-		}
+		//~ }
             //~ X_current_node, X_current_petsc, X_current_local_ghost_soln, X_current_dof_indices);
 
-        const size_t n_basis = U_new_dof_indices[0].size();
+        //~ const size_t n_basis = U_new_dof_indices[0].size();
 
 
-        const unsigned int n_qp = qrule->n_points();
-        for (unsigned int qp = 0; qp < n_qp; ++qp)
-        {
-            interpolate(X_qp_new, qp, X_new_node, phi);
-            interpolate(U_qp_current, qp, U_current_node, phi);
+					//~ Node* n = *it;
+                    //~ if (n->n_vars(U_new_sys_num))
+                    //~ {
+                        //~ const libMesh::Point& X = *n;
+                        //~ for (unsigned int d = 0; d < NDIM; ++d)
+                        //~ {
+                            //~ const int dof_index = n->dof_number(U_new_sys_num, d, 0);
+                            //~ u_new_vec.set(dof_index, U_e(d));
+                        //~ }
+                    //~ }
 
-             R_qp = X_qp_new - x_com;
-             WxR = W.cross(R_qp);
+        //~ const unsigned int n_qp = qrule->n_points();
+        //~ for (unsigned int qp = 0; qp < n_qp; ++qp)
+        //~ {
+            //~ interpolate(X_qp_new, qp, X_new_node, phi);
+            //~ interpolate(U_qp_current, qp, U_current_node, phi);
+
+             //~ R_qp = X_qp_new - x_com;
+             //~ WxR = W.cross(R_qp);
              
-               for (unsigned int k = 0; k < n_basis; ++k)
-                {
-					 for (unsigned int i = 0; i < NDIM; ++i)
-                    {
-						U_e[i](k) = V(i) + WxR(i) + U_qp_current(i);
-					}
-				}
+               //~ for (unsigned int k = 0; k < n_basis; ++k)
+                //~ {
+					 //~ for (unsigned int i = 0; i < NDIM; ++i)
+                    //~ {
+						//~ U_e[i](k) = -0.5 * II(i); //V(i) + WxR(i) + U_qp_current(i);
+					//~ }
+				//~ }
 
 			// U_e = V + WxR + U_qp_current;
             // U_new_petsc.add_vector( V + WxR + U_qp_current, U_new_dof_indices);
  
                             
-		}
-		
+		//~ }
 
          //~ U_new_system.get_dof_map().constrain_element_vector(U_new_vec, dof_indices);
          //~ U_new_vec.add_vector( U_e, U_new_dof_indices);
 		
-		for (unsigned int d = 0; d < NDIM; ++d)
-        {
-			 u_new_vec.add_vector( U_e[d], U_new_dof_indices[d]);
+		//~ for (unsigned int d = 0; d < NDIM; ++d)
+        //~ {
+			 //~ u_new_vec.add_vector( U_e[d], U_new_dof_indices[d]);
 
-            //~ const int dof_index = n->dof_number(U_sys_num, d, 0);
 
-            //~ U_coords.set(dof_index, U(d));
-        }
-        
-        		
-                      
-	}
+        //~ }c
+              
+	//~ }
     
-	u_new_vec.close();
-    //U_new_system.get_dof_map().enforce_constraints_exactly(U_new_system, &U_new_vec);
+	//~ u_new_petsc.close();
+    //~ u_new_solid_system->get_dof_map().enforce_constraints_exactly(*u_new_solid_system, &u_new_petsc);
    // U_new_system.solution->localize(*U_new_system.current_local_solution);
+	// u_new_solid_system->get_dof_map().enforce_constraints_exactly(u_new_solid_system, &u_new_vec);
+     //~ u_new_solid_system->solution->localize(*u_new_solid_system->current_local_solution);
 	
-	
-	VecRestoreArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
-    VecGhostRestoreLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
+	//~ VecRestoreArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
+    //~ VecGhostRestoreLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
     
     
-    VecRestoreArray(U_current_local_ghost_vec, &U_current_local_ghost_soln);
-    VecGhostRestoreLocalForm(U_current_global_vec, &U_current_local_ghost_vec);
+    //~ VecRestoreArray(U_current_local_ghost_vec, &U_current_local_ghost_soln);
+    //~ VecGhostRestoreLocalForm(U_current_global_vec, &U_current_local_ghost_vec);
 
 
 
@@ -684,11 +727,11 @@ void updateLagrangianVelocityOfQuadPoints(VectorValue<double> x_com,
 	
 } //updateLagrangianVelocityOfQuadPoints
 
-void updateLagrangianPositionOfQuadPoints(const double dt)
+void updateLagrangianPositionOfQuadPoints(const double dt, EquationSystems* solid_equation_systems)
 {
 	
 	// Extract the FE system and DOF map, and setup the FE object.
-    //~ System& X_new_system = solid_equation_systems->get_system("position_new");
+    System& X_new_system = solid_equation_systems->get_system("position_new");
     x_new_solid_system->solution->localize(*x_new_solid_system->current_local_solution);
 
 
@@ -702,7 +745,7 @@ void updateLagrangianPositionOfQuadPoints(const double dt)
     
     
     
-    //~ System& U_current_system = solid_equation_systems->get_system("velocity_current");
+    System& U_current_system = solid_equation_systems->get_system("velocity_current");
     u_current_solid_system->solution->localize(*u_current_solid_system->current_local_solution);
 
 
@@ -718,11 +761,11 @@ void updateLagrangianPositionOfQuadPoints(const double dt)
     
     
  
-    //~ System& x_current_solid_system = solid_equation_systems->get_system("position_current");
-    x_current_solid_system->solution->localize(*x_current_solid_system->current_local_solution);
+    System& x_current_solid_system = solid_equation_systems->get_system("position_current");
+    x_current_solid_system.solution->localize(*x_current_solid_system.current_local_solution);
 
 
-    PetscVector<double>& X_current_petsc = dynamic_cast<PetscVector<double>&>(*x_current_solid_system->current_local_solution.get());
+    PetscVector<double>& X_current_petsc = dynamic_cast<PetscVector<double>&>(*x_current_solid_system.current_local_solution.get());
     X_current_petsc.close();
     Vec X_current_global_vec = X_current_petsc.vec();
     Vec X_current_local_ghost_vec;
@@ -731,7 +774,7 @@ void updateLagrangianPositionOfQuadPoints(const double dt)
     VecGetArray(X_current_local_ghost_vec, &X_current_local_ghost_soln);
     
 
-    //~ System& X_half_solid_system = solid_equation_systems->get_system("position_half");
+    System& X_half_solid_system = solid_equation_systems->get_system("position_half");
     x_half_solid_system->solution->localize(*x_half_solid_system->current_local_solution);
 
 
@@ -814,7 +857,7 @@ bool run_example(int argc, char* argv[])
 
         //~ const double grav_const =input_db->getDouble("RHO");
 
-        const double R = input_db->getDouble("R");
+        const double R = 0.5;
         if (NDIM == 2 && (elem_type == "TRI3" || elem_type == "TRI6"))
         {
 #ifdef LIBMESH_HAVE_TRIANGLE
@@ -929,7 +972,7 @@ bool run_example(int argc, char* argv[])
         EquationSystems* bndry_equation_systems = ib_method_ops->getFEDataManager()->getEquationSystems();
 
         // Setup solid systems.
-        libMesh::UniquePtr<EquationSystems> solid_equation_systems(new EquationSystems(solid_mesh));
+        libMesh::EquationSystems* solid_equation_systems(new EquationSystems(solid_mesh));
         x_new_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("position_new");
         u_new_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("velocity_new");
         x_current_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("position_current");
@@ -1174,13 +1217,13 @@ bool run_example(int argc, char* argv[])
        
        
 
-		calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, solid_mesh, rho);
+		//~ calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
 		
-		calculateGravitationalForce(F_b, rho, solid_mesh);
+		//~ calculateGravitationalForce(F_b, rho, solid_equation_systems);
 
 		
-		I_w_0 = I_w_current;
-		calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+		//~ I_w_0 = I_w_current;
+		//~ calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
 
 		//******************************************************************************//
 
@@ -1218,11 +1261,11 @@ bool run_example(int argc, char* argv[])
             iteration_num = time_integrator->getIntegratorStep();
             loop_time = time_integrator->getIntegratorTime();
 
- /*           
+  /*         
             // This is a horrible hack to set up the position and velocity vector.
             {
                 DenseVector<double> U(NDIM);
-                U(1) = -1.0;
+                U(1) = -0.25;
                 MeshBase& mesh = solid_equation_systems->get_mesh();
                 System& X_system = solid_equation_systems->get_system("position_new");
                 const unsigned int X_sys_num = X_system.number();
@@ -1266,22 +1309,23 @@ bool run_example(int argc, char* argv[])
             dt = time_integrator->getMaximumTimeStepSize();
             time_integrator->advanceHierarchy(dt);
             
+            
         //****************************** RBD code **************************************//
 	
-		calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, solid_mesh, rho);
+		//~ calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
 
-		calculateGravitationalForce(F_b, rho, solid_mesh);
-		calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+		//~ calculateGravitationalForce(F_b, rho, solid_equation_systems);
+		//~ calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
 
-		Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
-								   V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
+		//~ Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
+								   //~ V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
 								   
 
-		updateLagrangianVelocityOfQuadPoints(x_com_new, V_new, W_new, solid_mesh);
+		updateLagrangianVelocityOfQuadPoints(x_com_new, V_new, W_new, loop_time, solid_equation_systems);
 		
 		
 
-		updateLagrangianPositionOfQuadPoints(dt);
+		//updateLagrangianPositionOfQuadPoints(dt, solid_equation_systems);
 
 								              
 
@@ -1306,7 +1350,7 @@ bool run_example(int argc, char* argv[])
             // processing.
             iteration_num += 1;
             const bool last_step = !time_integrator->stepsRemaining();
-            /*
+            
             if (dump_viz_data && (iteration_num % viz_dump_interval == 0 || last_step))
             {
                 pout << "\nWriting visualization files...\n\n";
@@ -1317,8 +1361,8 @@ bool run_example(int argc, char* argv[])
                 }
                 if (uses_exodus)
                 {
-                    exodus_solid_io->write_timestep(
-                        exodus_solid_filename, *solid_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
+                    //~ exodus_solid_io->write_timestep(
+                        //~ exodus_solid_filename, *solid_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
                     exodus_bndry_io->write_timestep(
                         exodus_bndry_filename, *bndry_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
                 }
@@ -1333,7 +1377,7 @@ bool run_example(int argc, char* argv[])
                 pout << "\nWriting timer data...\n\n";
                 TimerManager::getManager()->print(plog);
             }
-            */
+            
             
             
         }

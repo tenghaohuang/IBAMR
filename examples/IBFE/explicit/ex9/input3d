@@ -30,7 +30,7 @@ SOLVER_TYPE                = "STAGGERED"       // the fluid solver to use (STAGG
 CFL_MAX                    = 0.2               // maximum CFL number
 DT                         = 0.25*CFL_MAX*DX    // maximum timestep size
 START_TIME                 = 0.0e0             // initial simulation time
-END_TIME                   = 1000*DT             // final simulation time
+END_TIME                   = 100             // final simulation time
 GROW_DT                    = 2.0e0             // growth factor for timesteps
 CONVECTIVE_TS_TYPE         = "ADAMS_BASHFORTH" // convective time stepping type
 CONVECTIVE_OP_TYPE         = "PPM"             // convective differencing discretization type
@@ -48,7 +48,7 @@ OUTPUT_DIV_U               = TRUE
 ENABLE_LOGGING             = TRUE
 
 // model parameters
-KAPPA_S = 0.5*DX/DT^2
+KAPPA_S = 0.1*DX/DT^2
 ETA_S = 0.0*DX/DT
 
 // collocated solver parameters
@@ -199,13 +199,13 @@ Main {
    solver_type = SOLVER_TYPE
 
 // log file parameters
-   log_file_name               = "IB3d.log"
+   log_file_name               = "IB3d_const_vel_mine.log"
    log_all_nodes               = FALSE
 
 // visualization dump parameters
    viz_writer                  = "VisIt","ExodusII"
    viz_dump_interval           = int(0.1/DT)
-   viz_dump_dirname            = "viz_IB3d"
+   viz_dump_dirname            = "viz_IB3d_const_vel_mine"
    visit_number_procs_per_file = 1
 
 // restart dump parameters
