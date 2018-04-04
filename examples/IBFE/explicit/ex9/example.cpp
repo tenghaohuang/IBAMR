@@ -514,12 +514,8 @@ void Solve6DOFSystemofEquations(const double dt,
 	const double TOL = sqrt(std::numeric_limits<double>::epsilon());
 
 	// This time-stepping scheme is implemented from the paper by Akkerman et al., J of Applied Mechanics,2012
-	//~ V_new = dt * ( F_b + F_s ) / M + V_current;
-	
-	pout << " F_b = "<< F_b << " V_current = "<<V_current<<"\n\n";
-	V_new = dt * ( F_b ) / M + V_current;
-	//x_new = 0.5 * dt * ( V_new + V_current) + x_current;
-	x_new = dt * V_new + x_current;
+	V_new = dt * ( F_b + F_s ) / M + V_current;	
+	x_new = 0.5 * dt * ( V_new + V_current) + x_current;
 	
 	
 	TensorValue<double> Q_new_iter, I_w_new_iter, Omega_current, Omega_new;
@@ -540,10 +536,10 @@ void Solve6DOFSystemofEquations(const double dt,
 	}
 	
 	
+	
 	V_current = V_new;
 	W_current = W_new;
 	Q_current = Q_new;
-	pout << " V_new = "<< V_new << " V_current = "<<V_current<<"\n\n";
 	
 	
     
@@ -583,9 +579,6 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                 System& U_current_system = solid_equation_systems->get_system("velocity_current");
                 NumericVector<double>& U_current_coords = *U_current_system.solution;
 				
-				pout << " V(0) = " << V(0) << "\n\n";
-				pout << " V(1) = " << V(1) << "\n\n";
-				pout << " V(2) = " << V(2) << "\n\n";
 
                 for (MeshBase::node_iterator it = mesh.local_nodes_begin(); it != mesh.local_nodes_end(); ++it)
                 {
@@ -596,14 +589,13 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                         const libMesh::Point& X = *n;
                         RR = X - x_com;
                         WxR = W.cross(RR);
-                      //  X_new = X + loop_time * (WxR + V);
-                       X_new = X + loop_time * (V);
+                        X_new = X + loop_time * (WxR + V);
+                      
                         for (unsigned int d = 0; d < NDIM; ++d)
                         {
                             const int dof_index = n->dof_number(U_sys_num, d, 0);
                             X_coords.set(dof_index, X_new(d));
-                            U_coords.set(dof_index, V(d));
-                          //~ U_coords.set(dof_index, V(d) + WxR(d));
+							U_coords.set(dof_index, V(d) + WxR(d));
                             X_current_coords.set(dof_index, X(d));
                             X_half_coords.set(dof_index, 0.5 * (X(d) + X_new(d)));
 
@@ -742,8 +734,7 @@ bool run_example(int argc, char* argv[])
 
         kappa_s = input_db->getDouble("KAPPA_S");
         eta_s = input_db->getDouble("ETA_S");
-        
-        pout<< " kappa_s = " << kappa_s << "\n\n";
+
        
         // Create major algorithm and data objects that comprise the
         // application.  These objects are configured from the input database
@@ -1173,7 +1164,7 @@ bool run_example(int argc, char* argv[])
     } // cleanup dynamically allocated objects prior to shutdown
 
     SAMRAIManager::shutdown();
-    return true;
+    return bool;
 } // run_example
 
 
