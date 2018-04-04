@@ -514,8 +514,7 @@ void Solve6DOFSystemofEquations(const double dt,
 	const double TOL = sqrt(std::numeric_limits<double>::epsilon());
 
 	// This time-stepping scheme is implemented from the paper by Akkerman et al., J of Applied Mechanics,2012
-	//V_new = dt * ( F_b + F_s ) / M + V_current;
-	V_new = dt * F_b / M + V_current; 
+	V_new = dt * ( F_b + F_s ) / M + V_current;
 	x_new = 0.5 * dt * ( V_new + V_current) + x_current;
 	
 	TensorValue<double> Q_new_iter, I_w_new_iter, Omega_current, Omega_new;
@@ -593,7 +592,7 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                         {
                             const int dof_index = n->dof_number(U_sys_num, d, 0);
                             X_coords.set(dof_index, X_new(d));
-                            U_coords.set(dof_index, V(d));
+                            U_coords.set(dof_index, V(d) + WxR(d));
                             X_current_coords.set(dof_index, X(d));
                             X_half_coords.set(dof_index, 0.5 * (X(d) + X_new(d)));
 
@@ -1096,8 +1095,6 @@ bool run_example(int argc, char* argv[])
 
 		calculateGravitationalForce(F_b, rho, solid_equation_systems);
 		calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
-
-		pout << " M_new = "<< M_new<<"    F_b = "<< F_b(1)<<"\n\n";
 
 		Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
 								   V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
