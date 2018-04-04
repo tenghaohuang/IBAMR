@@ -453,7 +453,7 @@ void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body 
         {
 
 			 for (int d = 0; d < 3; ++d)
-				F_g(d) = 0.5 * rho * grav_const[d] * JxW[qp];
+				F_g(d) += 0.5 * rho * grav_const[d] * JxW[qp];
             
 
         }
@@ -465,6 +465,7 @@ void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body 
 
 	return;
 } //calculateGravitationalForce
+
 
 
 
