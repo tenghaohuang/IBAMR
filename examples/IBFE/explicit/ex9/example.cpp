@@ -72,6 +72,10 @@
 
 // Set up application namespace declarations
 #include <ibamr/app_namespaces.h>
+
+#include "CartGridBodyForce.h"
+#include "ForceProjector.h"
+
 // Elasticity model data.
 namespace ModelData
 {
@@ -264,6 +268,7 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
 	x_com_new /= vol_new;
 	x_com_current /= vol_current;
 	M_current = rho * vol_current;
+    M_new = rho * vol_new;
     
     for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
     {
@@ -468,7 +473,6 @@ void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body 
 
 
 
-
 void getSkewSymmetricAngVelTensor(TensorValue<double>& Omega,
 								  VectorValue<double> W)
 {
@@ -542,7 +546,7 @@ void Solve6DOFSystemofEquations(const double dt,
 }//Solve6DOFSystemofEquations
 
 
-void updateVelocityAndPositionOfLagrangianPoints(VectorValue<double> x_com,
+void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
 										  VectorValue<double> V,              // linear velocity of the body
 										  VectorValue<double> W,              // angular velocity of the body
 										  const double loop_time,
@@ -622,7 +626,7 @@ void updateVelocityAndPositionOfLagrangianPoints(VectorValue<double> x_com,
     return;
 	
 	
-} //updateVelocityAndPositionOfLagrangianPoints
+} //updateVelocityAndPositionOfSolidPoints
 
 
 bool run_example(int argc, char* argv[])
@@ -1090,18 +1094,16 @@ bool run_example(int argc, char* argv[])
 	
 		calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
 
-		//calculateGravitationalForce(F_b, rho, solid_equation_systems);
+		calculateGravitationalForce(F_b, rho, solid_equation_systems);
 		calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
 
-		for (int d = 0; d < 3; ++d) F_b(d) = 5.0 * rho * grav_const[d] * M_new;
+		pout << " M_new = "<< M_new<<"    F_b = "<< F_b(1)<<"\n\n";
 
 		Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
 								   V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
+								   	
 								   
-								   
-								
-								   
-		updateVelocityAndPositionOfLagrangianPoints(x_com_new, V_new, W_new, loop_time, solid_equation_systems);
+		updateVelocityAndPositionOfSolidPoints(x_com_new, V_new, W_new, loop_time, solid_equation_systems);
 			              
 
 		//******************************************************************************//
@@ -1190,8 +1192,6 @@ calculateCodim0StructureKinematicsVelocity()
 
 
 
-
-/*
 void
 calculateMomentumOfKinematicsVelocity(const int position_handle)
 {

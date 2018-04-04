@@ -28,14 +28,14 @@ USE_CONSISTENT_MASS_MATRIX = TRUE              // whether to use a consistent or
 IB_POINT_DENSITY           = 4.0               // approximate density of IB quadrature points for Lagrangian-Eulerian interaction
 SOLVER_TYPE                = "STAGGERED"       // the fluid solver to use (STAGGERED or COLLOCATED)
 CFL_MAX                    = 0.2               // maximum CFL number
-DT                         = 0.25*CFL_MAX*DX    // maximum timestep size
+DT                         = 0.1*CFL_MAX*DX    // maximum timestep size
 START_TIME                 = 0.0e0             // initial simulation time
 END_TIME                   = 100             // final simulation time
 GROW_DT                    = 2.0e0             // growth factor for timesteps
 CONVECTIVE_TS_TYPE         = "ADAMS_BASHFORTH" // convective time stepping type
 CONVECTIVE_OP_TYPE         = "PPM"             // convective differencing discretization type
 CONVECTIVE_FORM            = "ADVECTIVE"       // how to compute the convective terms
-NORMALIZE_PRESSURE         = FALSE             // whether to explicitly force the pressure to have mean zero
+NORMALIZE_PRESSURE         = FALSE             // whether to explicitly force the  pressure to have mean zero
 ERROR_ON_DT_CHANGE         = TRUE              // whether to emit an error message if the time step size changes
 VORTICITY_TAGGING          = TRUE              // whether to tag cells for refinement based on vorticity thresholds
 TAG_BUFFER                 = 1                 // size of tag buffer used by grid generation algorithm
@@ -48,7 +48,7 @@ OUTPUT_DIV_U               = TRUE
 ENABLE_LOGGING             = TRUE
 
 // model parameters
-KAPPA_S = 0.1*DX/DT^2
+KAPPA_S = 0.01*DX/DT^2
 ETA_S = 0.0*DX/DT
 
 // collocated solver parameters
@@ -199,13 +199,13 @@ Main {
    solver_type = SOLVER_TYPE
 
 // log file parameters
-   log_file_name               = "IB3d_const_vel_mine_calc.log"
+   log_file_name               = "IB3d_RBD.log"
    log_all_nodes               = FALSE
 
 // visualization dump parameters
    viz_writer                  = "VisIt","ExodusII"
    viz_dump_interval           = int(0.1/DT)
-   viz_dump_dirname            = "viz_IB3d_const_vel_mine_calc"
+   viz_dump_dirname            = "viz_IB3d_RBD"
    visit_number_procs_per_file = 1
 
 // restart dump parameters
