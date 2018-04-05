@@ -80,8 +80,7 @@ namespace ModelData
 static double kappa_s = 1.0e6;
 static double eta_s = 0.0;
 static double grav_const[3]={0.0,-9.81,0.0};
-        //~ grav_const(0) = grav_const(2) = 0.0;
-        //~ grav_const(1) = -9.81;
+
 
 System* x_new_solid_system, * u_new_solid_system, * x_current_solid_system, * u_current_solid_system;
 System* x_half_solid_system, * u_half_solid_system;
@@ -263,9 +262,9 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
     SAMRAI_MPI::sumReduction(&vol_current, 1);
 
 
-	x_com_new /= vol_new;
-	x_com_current /= vol_current;
-	M_current = rho * vol_current;
+    x_com_new /= vol_new;
+    x_com_current /= vol_current;
+    M_current = rho * vol_current;
     M_new = rho * vol_new;
     
     for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
@@ -636,6 +635,8 @@ bool run_example(int argc, char* argv[])
     SAMRAI_MPI::setCommunicator(PETSC_COMM_WORLD);
     SAMRAI_MPI::setCallAbortInSerialInsteadOfExit();
     SAMRAIManager::startup();
+    
+
 
     { // cleanup dynamically allocated objects prior to shutdown
 
@@ -645,6 +646,7 @@ bool run_example(int argc, char* argv[])
         Pointer<AppInitializer> app_initializer = new AppInitializer(argc, argv, "IB.log");
         Pointer<Database> input_db = app_initializer->getInputDatabase();
 
+ 
         // Get various standard options set in the input file.
         const bool dump_viz_data = app_initializer->dumpVizData();
         const int viz_dump_interval = app_initializer->getVizDumpInterval();
@@ -664,6 +666,7 @@ bool run_example(int argc, char* argv[])
         {
             Utilities::recursiveMkdir(postproc_data_dump_dirname);
         }
+
 
         const bool dump_timer_data = app_initializer->dumpTimerData();
         const int timer_dump_interval = app_initializer->getTimerDumpInterval();
@@ -732,7 +735,7 @@ bool run_example(int argc, char* argv[])
 
         kappa_s = input_db->getDouble("KAPPA_S");
         eta_s = input_db->getDouble("ETA_S");
-
+  
        
         // Create major algorithm and data objects that comprise the
         // application.  These objects are configured from the input database
@@ -842,8 +845,7 @@ bool run_example(int argc, char* argv[])
             u_half_solid_system->add_variable(os.str(), order, family);
         }
         
-        
-        
+
         
         solid_equation_systems->init();
 
@@ -1020,8 +1022,8 @@ bool run_example(int argc, char* argv[])
         
         //~ Q_new.zero();
 
-		TensorValue<double> Q_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-		TensorValue<double> Q_current(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+	TensorValue<double> Q_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+	TensorValue<double> Q_current(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
         I_w_current.zero();
         I_w_new.zero();
         x_com_new.zero();
@@ -1038,15 +1040,14 @@ bool run_example(int argc, char* argv[])
        
        
 
-		calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
+	calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
 		
-		calculateGravitationalForce(F_b, rho, solid_equation_systems);
+	calculateGravitationalForce(F_b, rho, solid_equation_systems);
+	
+	I_w_0 = I_w_current;
+	//calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
 
-		
-		I_w_0 = I_w_current;
-		calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
-
-		//******************************************************************************//
+	//******************************************************************************//
 
      
         
@@ -1060,8 +1061,8 @@ bool run_example(int argc, char* argv[])
             }
             if (uses_exodus)
             {
-                //~ exodus_solid_io->write_timestep(
-                    //~ exodus_solid_filename, *solid_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
+                exodus_solid_io->write_timestep(
+                    exodus_solid_filename, *solid_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
                 exodus_bndry_io->write_timestep(
                     exodus_bndry_filename, *bndry_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
             }
@@ -1073,8 +1074,6 @@ bool run_example(int argc, char* argv[])
         double loop_time_end = time_integrator->getEndTime();
         double dt = 0.0;
         
-
-
 
 
         while (!MathUtilities<double>::equalEps(loop_time, loop_time_end) && time_integrator->stepsRemaining())
@@ -1093,19 +1092,19 @@ bool run_example(int argc, char* argv[])
             
         //****************************** RBD code **************************************//
 	
-		calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
+	calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
 
-		calculateGravitationalForce(F_b, rho, solid_equation_systems);
-		calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+	calculateGravitationalForce(F_b, rho, solid_equation_systems);
+	//calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
 
-		Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
+	Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
 								   V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
 								   	
 								   
-		updateVelocityAndPositionOfSolidPoints(x_com_new, V_new, W_new, loop_time, solid_equation_systems);
+	updateVelocityAndPositionOfSolidPoints(x_com_new, V_new, W_new, loop_time, solid_equation_systems);
 			              
 
-		//******************************************************************************//
+	//******************************************************************************//
 
             
             
@@ -1134,8 +1133,8 @@ bool run_example(int argc, char* argv[])
                 }
                 if (uses_exodus)
                 {
-                    //~ exodus_solid_io->write_timestep(
-                        //~ exodus_solid_filename, *solid_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
+                    exodus_solid_io->write_timestep(
+                        exodus_solid_filename, *solid_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
                     exodus_bndry_io->write_timestep(
                         exodus_bndry_filename, *bndry_equation_systems, iteration_num / viz_dump_interval + 1, loop_time);
                 }
@@ -1154,17 +1153,27 @@ bool run_example(int argc, char* argv[])
             
             
         }
+        
+         u_half_solid_system->clear();
+         x_half_solid_system->clear();
+         x_new_solid_system->clear();
+         u_new_solid_system->clear();
+         x_current_solid_system->clear();
+         u_current_solid_system->clear();
+		 solid_equation_systems->clear();
+		 bndry_equation_systems->clear(); 
 
         // Cleanup Eulerian boundary condition specification objects (when
         // necessary).
         for (unsigned int d = 0; d < NDIM; ++d) delete u_bc_coefs[d];
+        
+        
 
     } // cleanup dynamically allocated objects prior to shutdown
 
     SAMRAIManager::shutdown();
-    return bool;
+    return true;
 } // run_example
-
 
  // ************ Some code following Amneet's approach for increasing accuracy.. might be added it later******* //
 /*

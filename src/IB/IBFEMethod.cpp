@@ -1236,47 +1236,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
             Pointer<CellData<NDIM, double> > p_data = patch->getPatchData(p_data_idx);
 
-            //~ const Pointer<CellData<NDIM, double> > wgt_data = patch->getPatchData(wgt_idx);
 
-            //~ const Box<NDIM> domain_box = grid_geom->getPhysicalDomain()[0];
-            //~ Box<NDIM> interior_box = domain_box;
-            //~ for (unsigned int d = 0; d < NDIM - 1; ++d)
-            //~ {
-            //~ interior_box.grow(d, -1);
-            //~ }
-            //~ BoxList<NDIM> bdry_boxes;
-            //~ bdry_boxes.removeIntersections(domain_box, interior_box);
-            //~ double vol = 0.0;
-            //~ const int coarsest_ln = 0;
-            //~ const int finest_ln = d_hierarchy->getFinestLevelNumber();
-            //~ double p_norm = 0.0;
-            //~ for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
-            //~ {
-            //~ Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
-            //~ BoxList<NDIM> level_bdry_boxes(bdry_boxes);
-            //~ level_bdry_boxes.refine(level->getRatio());
-            //~ for (PatchLevel<NDIM>::Iterator p(level); p; p++)
-            //~ {
-            //~ Pointer<Patch<NDIM> > patch = level->getPatch(p());
-            //~ const Box<NDIM>& patch_box = patch->getBox();
-            //~ const Pointer<CellData<NDIM, double> > p_data = patch->getPatchData(p_data_idx);
-            //~ const Pointer<CellData<NDIM, double> > wgt_data = patch->getPatchData(wgt_idx);
-            //~ for (BoxList<NDIM>::Iterator blist(level_bdry_boxes); blist; blist++)
-            //~ {
-            //~ for (Box<NDIM>::Iterator b(blist() * patch_box); b; b++)
-            //~ {
-            //~ const Index<NDIM>& i = b();
-            //~ p_norm += (*p_data)(i) * (*wgt_data)(i);
-            //~ vol += (*wgt_data)(i);
-            //~ }
-            //~ }
-            //~ }
-            //~ }
-            //~ SAMRAI_MPI::sumReduction(&p_norm, 1);
-            //~ SAMRAI_MPI::sumReduction(&vol, 1);
-            //~ p_norm /= vol;
-
-            //~ pout<< " Print p_NORM = "<<p_norm<<"\n\n";
 
             const IntVector<NDIM>& p_gcw = p_data->getGhostCellWidth();
 
@@ -1297,7 +1257,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
             std::vector<double> periodic_shifts(NDIM * local_indices.size());
 
-            const int nindices = static_cast<int>(local_indices.size());
+            const unsigned int nindices = static_cast<int>(local_indices.size());
 
             typedef boost::multi_array_types::extent_range range;
 
@@ -1328,7 +1288,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 x_lower_axis[2] = x_upper_axis[2] = 0.0;
 #endif
 
-                Box<NDIM> side_boxes[NDIM];
+                //Box<NDIM> side_boxes[NDIM];
 
                 //~ for (unsigned int axis = 0; axis < NDIM; ++axis)
                 //~ {
@@ -2290,16 +2250,16 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 #endif
 
 
-        computeFluidTraction(d_half_time,
-                             *P_j_ghost_vec,
-                             *du_j_ghost_vec,
-                             *dv_j_ghost_vec,
-#if (NDIM == 3)
-                             *dw_j_ghost_vec,
-#endif
-                             U_idx,
-                             p_idx,
-                             part);
+        //~ computeFluidTraction(d_half_time,
+                             //~ *P_j_ghost_vec,
+                             //~ *du_j_ghost_vec,
+                             //~ *dv_j_ghost_vec,
+//~ #if (NDIM == 3)
+                             //~ *dw_j_ghost_vec,
+//~ #endif
+                             //~ U_idx,
+                             //~ p_idx,
+                             //~ part);
         
         // Reset time-dependent Lagrangian data.
         d_X_new_vecs[part]->close();
@@ -3247,7 +3207,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
         std::vector<double> periodic_shifts(NDIM * local_indices.size());
 
-        const int nindices = static_cast<int>(local_indices.size());
+        const unsigned int nindices = static_cast<int>(local_indices.size());
 
         typedef boost::multi_array_types::extent_range range;
 
@@ -4335,7 +4295,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
         }
 
         std::vector<double> periodic_shifts(NDIM * local_indices.size());
-        const int nindices = static_cast<int>(local_indices.size());
+        const unsigned int nindices = static_cast<int>(local_indices.size());
         typedef boost::multi_array_types::extent_range range;
 
         if (!local_indices.empty())
@@ -5879,7 +5839,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 			std::vector<double> periodic_shifts(NDIM * local_indices.size());
 	
 
-		    const int nindices = static_cast<int>(local_indices.size());
+		    const unsigned int nindices = static_cast<int>(local_indices.size());
 		    
 		   
 		    typedef boost::multi_array_types::extent_range range;
@@ -9287,8 +9247,8 @@ IBFEMethod::computeInteriorForceDensity(PetscVector<double>& F_vec,
     VecGetArray(F_b_local_vec, &F_b_local_soln);
 #endif
 
-
-
+if (d_use_higher_order_jump)
+{
 	//~ // Calculate the second order jumps [[dp/dx]], [[dp/dy]], [[du/x^]], [[du/dx^2]],[[dv/x^]], [[dv/dx^2]]
 	
     for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
@@ -9414,7 +9374,7 @@ IBFEMethod::computeInteriorForceDensity(PetscVector<double>& F_vec,
                 d2u_j = (dP_dt_j * n + dA_da * interpolate(qp, F_n_node, X_dphi_dxi)* tau1unit - H * Ft * tau1unit )* n(0) * n(0) + 2.0 * (-dP_dt_j * tau1unit - H * Ft * n ) * n(0) * tau1unit(0) + ( H * Ft * tau1unit ) * tau1unit(0) * tau1unit(0);   
                 d2v_j = (dP_dt_j * n + dA_da * interpolate(qp, F_n_node, X_dphi_dxi)* tau1unit - H * Ft * tau1unit )* n(1) * n(1) + 2.0 * (-dP_dt_j * tau1unit - H * Ft * n ) * n(1) * tau1unit(1) + ( H * Ft * tau1unit ) * tau1unit(1) * tau1unit(1);
  #if (NDIM == 3)
-                 d2w_j = (dP_j - H * Fb * tau1unit )* n(2) * n(2) + 2.0 * (-dP_dt_j * tau2unit - H * Fb * n ) * n(2) * tau1unit(2) + ( H * Fb * tau2unit ) * tau1unit(2) * tau1unit(2);
+                 d2w_j = (dP_dt_j * n + dA_da * interpolate(qp, F_n_node, X_dphi_dxi)* tau1unit - H * Ft * tau1unit )* n(2) * n(2) + 2.0 * (-dP_dt_j * tau1unit - H * Ft * n ) * n(2) * tau1unit(2) + ( H * Ft * tau1unit ) * tau1unit(2) * tau1unit(2);
 
  #endif               
                 
@@ -9489,7 +9449,7 @@ IBFEMethod::computeInteriorForceDensity(PetscVector<double>& F_vec,
 
 #endif
 
-
+}
 
     VecRestoreArray(F_n_local_vec, &F_n_local_soln);
     VecGhostRestoreLocalForm(F_n_global_vec, &F_n_local_vec);

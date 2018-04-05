@@ -22,15 +22,15 @@ SPLIT_NORMAL_FORCES        = TRUE             // whether to split interior and b
 SPLIT_TANGENTIAL_FORCES   =  TRUE
 VEL_INTERP_WIDTH           = 1.0
 USE_JUMP_CONDITIONS        = TRUE             // whether to impose pressure jumps at fluid-structure interfaces
-USE_HIGHER_ORDER_JUMP	   = TRUE
+USE_HIGHER_ORDER_JUMP	   = FALSE
 MODIFY_VEL_INTERP_JUMPS    = TRUE
 USE_CONSISTENT_MASS_MATRIX = TRUE              // whether to use a consistent or lumped mass matrix
 IB_POINT_DENSITY           = 4.0               // approximate density of IB quadrature points for Lagrangian-Eulerian interaction
 SOLVER_TYPE                = "STAGGERED"       // the fluid solver to use (STAGGERED or COLLOCATED)
-CFL_MAX                    = 0.2               // maximum CFL number
-DT                         = 0.1*CFL_MAX*DX    // maximum timestep size
+CFL_MAX                    = 0.1               // maximum CFL number
+DT                         = 0.2*CFL_MAX*DX    // maximum timestep size
 START_TIME                 = 0.0e0             // initial simulation time
-END_TIME                   = 100             // final simulation time
+END_TIME                   = 200 * DT             // final simulation time
 GROW_DT                    = 2.0e0             // growth factor for timesteps
 CONVECTIVE_TS_TYPE         = "ADAMS_BASHFORTH" // convective time stepping type
 CONVECTIVE_OP_TYPE         = "PPM"             // convective differencing discretization type
@@ -48,7 +48,7 @@ OUTPUT_DIV_U               = TRUE
 ENABLE_LOGGING             = TRUE
 
 // model parameters
-KAPPA_S = 0.01*DX/DT^2
+KAPPA_S = 200 //0.005*DX/DT^2
 ETA_S = 0.0*DX/DT
 
 // collocated solver parameters
@@ -204,8 +204,8 @@ Main {
 
 // visualization dump parameters
    viz_writer                  = "VisIt","ExodusII"
-   viz_dump_interval           = int(0.1/DT)
-   viz_dump_dirname            = "viz_IB3d_RBD"
+   viz_dump_interval           = int(0.02/DT)
+   viz_dump_dirname            = "viz_IB3d_gravity"
    visit_number_procs_per_file = 1
 
 // restart dump parameters
@@ -213,8 +213,8 @@ Main {
    restart_dump_dirname        = "restart_IB3d"
 
 // hierarchy data dump parameters
-   data_dump_interval          = 1
-   data_dump_dirname           = "hier_data_IB3d"
+   data_dump_interval          = int(0.02/DT)
+   data_dump_dirname           = "hier_data_IB3d_gravity"
 
 // timer dump parameters
    timer_dump_interval         = 0

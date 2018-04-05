@@ -22,7 +22,7 @@ SPLIT_NORMAL_FORCES        = TRUE             // whether to split interior and b
 SPLIT_TANGENTIAL_FORCES   =  TRUE
 VEL_INTERP_WIDTH           = 1.0
 USE_JUMP_CONDITIONS        = TRUE             // whether to impose pressure jumps at fluid-structure interfaces
-USE_HIGHER_ORDER_JUMP	   = TRUE
+USE_HIGHER_ORDER_JUMP	   = FALSE
 MODIFY_VEL_INTERP_JUMPS    = TRUE
 USE_CONSISTENT_MASS_MATRIX = TRUE              // whether to use a consistent or lumped mass matrix
 IB_POINT_DENSITY           = 4.0               // approximate density of IB quadrature points for Lagrangian-Eulerian interaction
@@ -204,8 +204,8 @@ Main {
 
 // visualization dump parameters
    viz_writer                  = "VisIt","ExodusII"
-   viz_dump_interval           = int(0.05/DT)
-   viz_dump_dirname            = "viz_IB3d"
+   viz_dump_interval           = int(0.02/DT)
+   viz_dump_dirname            = "viz_IB3d_gravity"
    visit_number_procs_per_file = 1
 
 // restart dump parameters
@@ -213,8 +213,8 @@ Main {
    restart_dump_dirname        = "restart_IB3d"
 
 // hierarchy data dump parameters
-   data_dump_interval          = 1
-   data_dump_dirname           = "hier_data_IB3d"
+   data_dump_interval          = int(0.02/DT)
+   data_dump_dirname           = "hier_data_IB3d_gravity"
 
 // timer dump parameters
    timer_dump_interval         = 0
