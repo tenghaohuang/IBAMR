@@ -73,8 +73,6 @@
 // Set up application namespace declarations
 #include <ibamr/app_namespaces.h>
 
-#include "CartGridBodyForce.h"
-#include "ForceProjector.h"
 
 // Elasticity model data.
 namespace ModelData
