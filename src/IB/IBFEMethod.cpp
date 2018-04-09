@@ -2816,6 +2816,25 @@ IBFEMethod::computeFluidTraction(const double data_time,
         TBOX_ASSERT(dv_j_dof_map.variable_type(d) == dv_j_fe_type);
     }
     std::vector<std::vector<unsigned int> > dv_j_dof_indices(NDIM);
+    
+    
+#if(NDIM == 3)
+
+
+    System& dw_j_system = equation_systems->get_system(DW_J_SYSTEM_NAME);
+    FEDataManager::SystemDofMapCache& dw_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DW_J_SYSTEM_NAME);
+    const DofMap& dw_j_dof_map = dw_j_system.get_dof_map();
+    FEType dw_j_fe_type = dw_j_dof_map.variable_type(0);
+
+    for (unsigned int d = 0; d < NDIM; ++d)
+    {
+        TBOX_ASSERT(dw_j_dof_map.variable_type(d) == dw_j_fe_type);
+    }
+    std::vector<std::vector<unsigned int> > dw_j_dof_indices(NDIM);
+    
+
+
+#endif
 
     System& TAU_system = equation_systems->get_system(TAU_SYSTEM_NAME);
     const DofMap& TAU_dof_map = TAU_system.get_dof_map();
@@ -2851,12 +2870,15 @@ IBFEMethod::computeFluidTraction(const double data_time,
     
     boost::multi_array<double, 2> X_node, X0_node, WSS_i_node, WSS_o_node, n_qp_node;
     boost::multi_array<double, 1> P_i_node, P_o_node, P_j_node;
-    boost::multi_array<double, 2> du_j_node, dv_j_node, dw_j_node;
+    boost::multi_array<double, 2> du_j_node, dv_j_node;
     boost::multi_array<double, 1> dv_x_i_node, du_y_i_node, dv_x_o_node, du_y_o_node;
     std::vector<double> X_qp, X0_qp, X_qp_m, X_qp_p, X_qp_mm, X_qp_pp;
     std::vector<double> P_i_qp, P_o_qp, P_j_qp, du_j_qp, dv_j_qp, du_y_o_qp, dv_x_o_qp, du_y_i_qp, dv_x_i_qp, p_qp, N_qp, WSS_i_qp,
         WSS_o_qp, TAU_qp;
-    
+#if(NDIM == 3)
+	boost::multi_array<double, 2> dw_j_node;
+	std::vector<double> dw_j_qp;
+#endif
     double dA_da;
 
     P_i_ghost_vec->close();
@@ -3037,7 +3059,11 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
         std::fill(du_j_qp.begin(), du_j_qp.end(), 0.0);
         std::fill(dv_j_qp.begin(), dv_j_qp.end(), 0.0);
-
+        
+#if (NDIM == 3)
+	dw_j_qp.resize(NDIM * n_qp_patch);
+        std::fill(dw_j_qp.begin(), dw_j_qp.end(), 0.0);
+#endif
         std::fill(P_i_qp.begin(), P_i_qp.end(), 0.0);
         std::fill(P_o_qp.begin(), P_o_qp.end(), 0.0);
 
@@ -3067,6 +3093,9 @@ IBFEMethod::computeFluidTraction(const double data_time,
                 WSS_o_dof_map_cache.dof_indices(elem, WSS_o_dof_indices[d], d);
                 du_j_dof_map_cache.dof_indices(elem, du_j_dof_indices[d], d);
                 dv_j_dof_map_cache.dof_indices(elem, dv_j_dof_indices[d], d);
+#if (NDIM == 3)
+				dw_j_dof_map_cache.dof_indices(elem, dw_j_dof_indices[d], d);
+#endif 
             }
             P_o_dof_map_cache.dof_indices(elem, P_o_dof_indices);
             P_i_dof_map_cache.dof_indices(elem, P_i_dof_indices);
@@ -3160,6 +3189,9 @@ IBFEMethod::computeFluidTraction(const double data_time,
                         WSS_o_qp[NDIM * (qp_offset + qp) + i] += WSS_o_node[k][i] * p_X;
                         du_j_qp[NDIM * (qp_offset + qp) + i] += du_j_node[k][i] * p_X;
                         dv_j_qp[NDIM * (qp_offset + qp) + i] += dv_j_node[k][i] * p_X;
+#if(NDIM == 3)	
+						dw_j_qp[NDIM * (qp_offset + qp) + i] += dw_j_node[k][i] * p_X;
+#endif 
                     }
                     N_qp[NDIM * (qp_offset + qp) + i] = n(i);
                 }
@@ -3227,6 +3259,60 @@ IBFEMethod::computeFluidTraction(const double data_time,
        // Using the jumps and the force defined as F = [tau]
        //~ (1.0/dA_da)*
 					//~ pout<< " da_da = " <<dA_da<<"\n\n";
+					
+/*					
+				
+			TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (- P_j_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
+			
+			
+#if(NDIM == 2)			
+			switch (axis)
+			{
+			
+				case 0 :
+				
+					TAU_qp[NDIM * local_indices[k] + axis] +=  (1.0/dA_da) * (du_j_qp[NDIM * local_indices[k]]* N_qp[NDIM * local_indices[k]] 
+															   + du_j_qp[NDIM * local_indices[k]+1] * N_qp[NDIM * local_indices[k] + 1]);
+
+				case 1 :
+				
+					TAU_qp[NDIM * local_indices[k] + axis] +=  (1.0/dA_da) * (dv_j_qp[NDIM * local_indices[k]]* N_qp[NDIM * local_indices[k]] 
+															   + dv_j_qp[NDIM * local_indices[k]+1] * N_qp[NDIM * local_indices[k] + 1]); 
+							       
+		    }
+#endif
+
+
+
+#if(NDIM == 3)			
+			switch (axis)
+			{
+			
+				case 0 :
+				
+					TAU_qp[NDIM * local_indices[k] + axis] +=  (1.0/dA_da) * (du_j_qp[NDIM * local_indices[k]]* N_qp[NDIM * local_indices[k]] 
+															   + du_j_qp[NDIM * local_indices[k]+1] * N_qp[NDIM * local_indices[k] + 1] 
+															   + du_j_qp[NDIM * local_indices[k]+2] * N_qp[NDIM * local_indices[k] + 2]); 
+
+				case 1 :
+				
+					TAU_qp[NDIM * local_indices[k] + axis] +=  (1.0/dA_da) * (dv_j_qp[NDIM * local_indices[k]]* N_qp[NDIM * local_indices[k]] 
+															   + dv_j_qp[NDIM * local_indices[k]+1] * N_qp[NDIM * local_indices[k] + 1] 
+															   + dv_j_qp[NDIM * local_indices[k]+2] * N_qp[NDIM * local_indices[k] + 2]);  
+				
+				
+				case 2 :
+				
+				
+					TAU_qp[NDIM * local_indices[k] + axis] +=  (1.0/dA_da) * (dw_j_qp[NDIM * local_indices[k]]* N_qp[NDIM * local_indices[k]] 
+															   + dw_j_qp[NDIM * local_indices[k]+1] * N_qp[NDIM * local_indices[k] + 1] 
+																+ dw_j_qp[NDIM * local_indices[k]+2] * N_qp[NDIM * local_indices[k] + 2]); 
+							       
+		    }
+#endif
+
+*/				
+          
      /* 
 					TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (- P_j_qp[local_indices[k]] * N_qp[NDIM *
                     local_indices[k] + axis] + (axis == 0 ? du_j_qp[NDIM * local_indices[k]]* N_qp[NDIM *
@@ -3242,7 +3328,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
         
           */          
                 
-                //~ // Using the exterior traciton tau_e
+                 // Using the exterior traciton tau_e
                     TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] -
                                                                           P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
                                                                           // +
@@ -3322,6 +3408,23 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
     VecRestoreArray(WSS_o_local_vec, &WSS_o_local_soln);
     VecGhostRestoreLocalForm(WSS_o_global_vec, &WSS_o_local_vec);
+    
+    
+    VecRestoreArray(du_j_local_vec, &du_j_local_soln);
+    VecGhostRestoreLocalForm(du_j_global_vec, &du_j_local_vec);
+    
+    
+    
+    VecRestoreArray(dv_j_local_vec, &dv_j_local_soln);
+    VecGhostRestoreLocalForm(dv_j_global_vec, &dv_j_local_vec);
+    
+#if(NDIM == 3)
+
+    VecRestoreArray(dw_j_local_vec, &dw_j_local_soln);
+    VecGhostRestoreLocalForm(dw_j_global_vec, &dw_j_local_vec);
+
+#endif
+
 
     //~ VecRestoreArray(du_y_o_local_vec, &du_y_o_local_soln);
     //~ VecGhostRestoreLocalForm(du_y_o_global_vec, &du_y_o_local_vec);
