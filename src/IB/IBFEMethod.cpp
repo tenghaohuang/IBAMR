@@ -2259,6 +2259,7 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
                              U_idx,
                              p_idx,
                              part);
+                             
         
         // Reset time-dependent Lagrangian data.
         d_X_new_vecs[part]->close();
@@ -7850,13 +7851,15 @@ IBFEMethod::spreadForce(const int f_data_idx,
         dw_j_vec->localize(*dw_j_ghost_vec);
 		d2w_j_vec->localize(*d2w_j_ghost_vec);
 #endif
+
+
         d_fe_data_managers[part]->spread(
             f_data_idx, *F_ghost_vec, *X_ghost_vec, FORCE_SYSTEM_NAME, f_phys_bdry_op, data_time);
         if (d_split_normal_force || d_split_tangential_force)
         {
             if (d_use_jump_conditions)
             {
-				
+
 				   imposeJumpConditionsWeak(f_data_idx,
                                      *F_ghost_vec,
                                      *X_ghost_vec,
@@ -11660,7 +11663,7 @@ IBFEMethod::imposeJumpConditionsPointWise(const int f_data_idx,
                 const size_t n_qp = intersection_ref_coords_p.size();
                 for (unsigned int qp = 0; qp < n_qp; ++qp)
                 {
-                 //   libMesh::Point& xx = intersection_coords_p[qp];
+                   libMesh::Point& xx = intersection_coords_p[qp];
                    // libMesh::Point& XX = intersection_ref_coords_p[qp];
 		
                     const SideIndex<NDIM>& i_s = intersection_indices_p[qp];

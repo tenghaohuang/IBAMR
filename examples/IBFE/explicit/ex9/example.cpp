@@ -216,7 +216,6 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
 
 
 
-
     // Loop over the local elements to compute the local integrals.
     boost::multi_array<double, 2> X_node_current, X_node_new;
 
@@ -519,7 +518,14 @@ void Solve6DOFSystemofEquations(const double dt,
 	Q_new_iter.zero();
 	Omega_current.zero();
 	Omega_new.zero();
+	I_w_new_iter.zero();
 	
+	
+	//pout <<  " The fluid torque is = << " << T << "\n\n";
+	
+//	pout <<" (Q_new_iter - Q_new).norm() ="<< (Q_new).norm()<<" (I_w_new_iter - I_w_new).norm() = " <<(I_w_new).norm() <<"\n\n";
+	
+	int iter = 0;
 	
 	while ( (Q_new_iter - Q_new).norm() > TOL || (I_w_new_iter - I_w_new).norm() > TOL )
 	{
@@ -530,8 +536,10 @@ void Solve6DOFSystemofEquations(const double dt,
 		I_w_new = Q_new * I_w_0 * Q_new.transpose();
 		W_new   = I_w_new.inverse() * ( dt * T + I_w_current * W_current );
 		Q_new = Q_current + 0.25 * dt * (Omega_new + Omega_current) * (Q_new + Q_current);
+		++iter;
 	}
 	
+	pout <<"\n\n"<< "Number of 6DOF iterations = " << iter<<"\n\n";
 	
 	
 	V_current = V_new;
@@ -548,7 +556,7 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
 										  VectorValue<double> V,              // linear velocity of the body
 										  VectorValue<double> W,              // angular velocity of the body
 										  const double loop_time,
-										  EquationSystems* solid_equation_systems)
+										  EquationSystems& solid_equation_systems)
 {
 
 	
@@ -557,23 +565,24 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
 				RR.zero();
 				WxR.zero();
 				X_new.zero();
-
-                MeshBase& mesh = solid_equation_systems->get_mesh();
-                System& X_system = solid_equation_systems->get_system("position_new");
+				
+				
+                MeshBase& mesh = solid_equation_systems.get_mesh();
+                System& X_system = solid_equation_systems.get_system("position_new");
                 const unsigned int X_sys_num = X_system.number();
                 
                 NumericVector<double>& X_coords = *X_system.solution;
-                System& U_system = solid_equation_systems->get_system("velocity_new");
+                System& U_system = solid_equation_systems.get_system("velocity_new");
                 const unsigned int U_sys_num = U_system.number();
                 NumericVector<double>& U_coords = *U_system.solution;
                 
-                System& X_current_system = solid_equation_systems->get_system("position_current");
+                System& X_current_system = solid_equation_systems.get_system("position_current");
                 NumericVector<double>& X_current_coords = *X_current_system.solution;
                 
-                System& X_half_system = solid_equation_systems->get_system("position_half");
+                System& X_half_system = solid_equation_systems.get_system("position_half");
                 NumericVector<double>& X_half_coords = *X_half_system.solution;
                 
-                System& U_current_system = solid_equation_systems->get_system("velocity_current");
+                System& U_current_system = solid_equation_systems.get_system("velocity_current");
                 NumericVector<double>& U_current_coords = *U_current_system.solution;
 				
 
@@ -1022,8 +1031,8 @@ bool run_example(int argc, char* argv[])
         
         //~ Q_new.zero();
 
-	TensorValue<double> Q_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-	TensorValue<double> Q_current(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+		TensorValue<double> Q_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+		TensorValue<double> Q_current(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
         I_w_current.zero();
         I_w_new.zero();
         x_com_new.zero();
@@ -1045,7 +1054,7 @@ bool run_example(int argc, char* argv[])
 	calculateGravitationalForce(F_b, rho, solid_equation_systems);
 	
 	I_w_0 = I_w_current;
-	//calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+	calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
 
 	//******************************************************************************//
 
@@ -1086,22 +1095,24 @@ bool run_example(int argc, char* argv[])
             pout << "At beginning of timestep # " << iteration_num << "\n";
             pout << "Simulation time is " << loop_time << "\n";
 
+
             dt = time_integrator->getMaximumTimeStepSize();
+           
             time_integrator->advanceHierarchy(dt);
-            
             
         //****************************** RBD code **************************************//
 	
 	calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
 
 	calculateGravitationalForce(F_b, rho, solid_equation_systems);
-	//calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+	calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+
 
 	Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
 								   V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
 								   	
 								   
-	updateVelocityAndPositionOfSolidPoints(x_com_new, V_new, W_new, loop_time, solid_equation_systems);
+	updateVelocityAndPositionOfSolidPoints(x_com_new, V_new, W_new, loop_time, *solid_equation_systems);
 			              
 
 	//******************************************************************************//
