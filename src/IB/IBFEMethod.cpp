@@ -2249,16 +2249,10 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 #endif
 
 
-        //~ computeFluidTraction(d_half_time,
-                             //~ *P_j_ghost_vec,
-                             //~ *du_j_ghost_vec,
-                             //~ *dv_j_ghost_vec,
-//~ #if (NDIM == 3)
-                             //~ *dw_j_ghost_vec,
-//~ #endif
-                             //~ U_idx,
-                             //~ p_idx,
-                             //~ part);
+        computeFluidTraction(d_half_time,
+                             U_idx,
+                             p_idx,
+                             part);
                              
         
         // Reset time-dependent Lagrangian data.
@@ -2555,12 +2549,6 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 
 void
 IBFEMethod::computeFluidTraction(const double data_time,
-                                 PetscVector<double>& P_j_ghost_vec,
-                                 PetscVector<double>& du_j_ghost_vec,
-                                 PetscVector<double>& dv_j_ghost_vec,
-#if (NDIM == 3)
-                                 PetscVector<double>& dw_j_ghost_vec,
-#endif
                                  const int U_data_idx,
                                  const int p_data_idx,
                                  unsigned int part)
@@ -2587,7 +2575,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
     //~ NumericVector<double>* du_y_i_ghost_vec = d_du_y_i_IB_ghost_vecs[part];
     //~ NumericVector<double>* dv_x_i_ghost_vec = d_dv_x_i_IB_ghost_vecs[part];
 
-#if (NDIM == 3)
+//~ #if (NDIM == 3)
 
     //~ NumericVector<double>* dw_y_vec = NULL;
     //~ NumericVector<double>* dw_x_vec = NULL;
@@ -2599,13 +2587,28 @@ IBFEMethod::computeFluidTraction(const double data_time,
     //~ NumericVector<double>* dv_z_ghost_vec = d_dv_z_IB_ghost_vecs[part];
     //~ NumericVector<double>* du_z_ghost_vec = d_du_z_IB_ghost_vecs[part];
 
-#endif
+//~ #endif
 
     NumericVector<double>* P_i_vec = NULL;
     NumericVector<double>* P_o_vec = NULL;
     NumericVector<double>* P_i_ghost_vec = d_P_i_IB_ghost_vecs[part];
     NumericVector<double>* P_o_ghost_vec = d_P_o_IB_ghost_vecs[part];
+    
+    
+    NumericVector<double>* du_j_vec = NULL;
+    NumericVector<double>* dv_j_vec = NULL;
+    NumericVector<double>* du_j_ghost_vec = d_du_j_IB_ghost_vecs[part];
+    NumericVector<double>* dv_j_ghost_vec = d_dv_j_IB_ghost_vecs[part];
 
+#if (NDIM == 3)
+    NumericVector<double>* dw_j_vec = NULL;
+    NumericVector<double>* dw_j_ghost_vec = d_dw_j_IB_ghost_vecs[part];
+#endif
+
+    NumericVector<double>* P_j_vec = NULL;
+    NumericVector<double>* P_j_ghost_vec = d_P_j_IB_ghost_vecs[part];
+    
+    
     NumericVector<double>* TAU_vec = d_TAU_half_vecs[part];
 
     NumericVector<double>* X_vec = NULL;
@@ -2657,6 +2660,22 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
     P_i_vec->localize(*P_i_ghost_vec);
     P_o_vec->localize(*P_o_ghost_vec);
+    
+    P_j_vec = d_P_j_half_vecs[part];
+    P_j_vec->localize(*P_j_ghost_vec);
+    
+    
+    du_j_vec = d_du_j_half_vecs[part];
+    dv_j_vec = d_dv_j_half_vecs[part];
+
+    du_j_vec->localize(*du_j_ghost_vec);
+    dv_j_vec->localize(*dv_j_ghost_vec);
+    
+#if (NDIM ==3)
+    dw_j_vec = d_dw_j_half_vecs[part];
+
+    dw_j_vec->localize(*dw_j_ghost_vec);
+#endif
 
     AutoPtr<NumericVector<double> > TAU_rhs_vec = (*TAU_vec).zero_clone();
     (*TAU_rhs_vec).zero();
@@ -2734,6 +2753,48 @@ IBFEMethod::computeFluidTraction(const double data_time,
         TBOX_ASSERT(WSS_o_dof_map.variable_type(d) == WSS_o_fe_type);
     }
     std::vector<std::vector<unsigned int> > WSS_o_dof_indices(NDIM);
+    
+    
+    
+            System& P_j_system = equation_systems->get_system(P_J_SYSTEM_NAME);
+        FEDataManager::SystemDofMapCache& P_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(P_J_SYSTEM_NAME);
+        DofMap& P_j_dof_map = P_j_system.get_dof_map();
+        TBOX_ASSERT(P_j_dof_map.variable_type(0) == X_fe_type);
+        std::vector<unsigned int> P_j_dof_indices;
+    
+    
+    
+System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
+    const DofMap& du_j_dof_map = du_j_system.get_dof_map();
+    FEDataManager::SystemDofMapCache& du_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DU_J_SYSTEM_NAME);
+    FEType du_j_fe_type = du_j_dof_map.variable_type(0);
+    for (unsigned int d = 0; d < NDIM; ++d)
+    {
+        TBOX_ASSERT(du_j_dof_map.variable_type(d) == du_j_fe_type);
+    }
+    std::vector<std::vector<unsigned int> > du_j_dof_indices(NDIM);
+
+    System& dv_j_system = equation_systems->get_system(DV_J_SYSTEM_NAME);
+    const DofMap& dv_j_dof_map = dv_j_system.get_dof_map();
+    FEDataManager::SystemDofMapCache& dv_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DV_J_SYSTEM_NAME);
+    FEType dv_j_fe_type = dv_j_dof_map.variable_type(0);
+    for (unsigned int d = 0; d < NDIM; ++d)
+    {
+        TBOX_ASSERT(dv_j_dof_map.variable_type(d) == dv_j_fe_type);
+    }
+    std::vector<std::vector<unsigned int> > dv_j_dof_indices(NDIM);
+
+#if (NDIM == 3)
+    System& dw_j_system = equation_systems->get_system(DW_J_SYSTEM_NAME);
+    const DofMap& dw_j_dof_map = dw_j_system.get_dof_map();
+    FEDataManager::SystemDofMapCache& dw_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DW_J_SYSTEM_NAME);
+    FEType dw_j_fe_type = dw_j_dof_map.variable_type(0);
+    for (unsigned int d = 0; d < NDIM; ++d)
+    {
+        TBOX_ASSERT(dw_j_dof_map.variable_type(d) == dw_j_fe_type);
+    }
+    std::vector<std::vector<unsigned int> > dw_j_dof_indices(NDIM);
+#endif
 
 
     //~ System& du_y_o_system = equation_systems->get_system(DU_Y_O_SYSTEM_NAME);
@@ -2789,53 +2850,6 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
 //~ #endif
 
-    System& P_j_system = equation_systems->get_system(P_J_SYSTEM_NAME);
-    FEDataManager::SystemDofMapCache& P_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(P_J_SYSTEM_NAME);
-    DofMap& P_j_dof_map = P_j_system.get_dof_map();
-    TBOX_ASSERT(P_j_dof_map.variable_type(0) == X_fe_type);
-    std::vector<unsigned int> P_j_dof_indices;
-
-    System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
-    FEDataManager::SystemDofMapCache& du_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DU_J_SYSTEM_NAME);
-    const DofMap& du_j_dof_map = du_j_system.get_dof_map();
-
-    FEType du_j_fe_type = du_j_dof_map.variable_type(0);
-
-    for (unsigned int d = 0; d < NDIM; ++d)
-    {
-        TBOX_ASSERT(du_j_dof_map.variable_type(d) == du_j_fe_type);
-    }
-    std::vector<std::vector<unsigned int> > du_j_dof_indices(NDIM);
-
-    System& dv_j_system = equation_systems->get_system(DV_J_SYSTEM_NAME);
-    FEDataManager::SystemDofMapCache& dv_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DV_J_SYSTEM_NAME);
-    const DofMap& dv_j_dof_map = dv_j_system.get_dof_map();
-    FEType dv_j_fe_type = dv_j_dof_map.variable_type(0);
-
-    for (unsigned int d = 0; d < NDIM; ++d)
-    {
-        TBOX_ASSERT(dv_j_dof_map.variable_type(d) == dv_j_fe_type);
-    }
-    std::vector<std::vector<unsigned int> > dv_j_dof_indices(NDIM);
-    
-    
-#if(NDIM == 3)
-
-
-    System& dw_j_system = equation_systems->get_system(DW_J_SYSTEM_NAME);
-    FEDataManager::SystemDofMapCache& dw_j_dof_map_cache = *d_fe_data_managers[part]->getDofMapCache(DW_J_SYSTEM_NAME);
-    const DofMap& dw_j_dof_map = dw_j_system.get_dof_map();
-    FEType dw_j_fe_type = dw_j_dof_map.variable_type(0);
-
-    for (unsigned int d = 0; d < NDIM; ++d)
-    {
-        TBOX_ASSERT(dw_j_dof_map.variable_type(d) == dw_j_fe_type);
-    }
-    std::vector<std::vector<unsigned int> > dw_j_dof_indices(NDIM);
-    
-
-
-#endif
 
     System& TAU_system = equation_systems->get_system(TAU_SYSTEM_NAME);
     const DofMap& TAU_dof_map = TAU_system.get_dof_map();
@@ -2872,6 +2886,8 @@ IBFEMethod::computeFluidTraction(const double data_time,
     boost::multi_array<double, 2> X_node, X0_node, WSS_i_node, WSS_o_node, n_qp_node;
     boost::multi_array<double, 1> P_i_node, P_o_node, P_j_node;
     boost::multi_array<double, 2> du_j_node, dv_j_node;
+    
+   
    // boost::multi_array<double, 1> dv_x_i_node, du_y_i_node, dv_x_o_node, du_y_o_node;
     std::vector<double> X_qp, X0_qp, X_qp_m, X_qp_p, X_qp_mm, X_qp_pp;
     std::vector<double> P_i_qp, P_o_qp, P_j_qp, du_j_qp, dv_j_qp, du_y_o_qp, dv_x_o_qp, du_y_i_qp, dv_x_i_qp, p_qp, N_qp, WSS_i_qp,
@@ -2947,22 +2963,24 @@ IBFEMethod::computeFluidTraction(const double data_time,
     double* WSS_o_local_soln;
     VecGetArray(WSS_o_local_vec, &WSS_o_local_soln);
 
-
-    PetscVector<double>* P_j_petsc_vec = static_cast<PetscVector<double>*>(&P_j_ghost_vec);
+	P_j_ghost_vec->close();
+    PetscVector<double>* P_j_petsc_vec = static_cast<PetscVector<double>*>(P_j_ghost_vec);
     Vec P_j_global_vec = P_j_petsc_vec->vec();
     Vec P_j_local_vec;
     VecGhostGetLocalForm(P_j_global_vec, &P_j_local_vec);
     double* P_j_local_soln;
     VecGetArray(P_j_local_vec, &P_j_local_soln);
 
-    PetscVector<double>* du_j_petsc_vec = static_cast<PetscVector<double>*>(&du_j_ghost_vec);
+	du_j_ghost_vec->close();
+    PetscVector<double>* du_j_petsc_vec = static_cast<PetscVector<double>*>(du_j_ghost_vec);
     Vec du_j_global_vec = du_j_petsc_vec->vec();
     Vec du_j_local_vec;
     VecGhostGetLocalForm(du_j_global_vec, &du_j_local_vec);
     double* du_j_local_soln;
     VecGetArray(du_j_local_vec, &du_j_local_soln);
 
-    PetscVector<double>* dv_j_petsc_vec = static_cast<PetscVector<double>*>(&dv_j_ghost_vec);
+	dv_j_ghost_vec->close();
+    PetscVector<double>* dv_j_petsc_vec = static_cast<PetscVector<double>*>(dv_j_ghost_vec);
     Vec dv_j_global_vec = dv_j_petsc_vec->vec();
     Vec dv_j_local_vec;
     VecGhostGetLocalForm(dv_j_global_vec, &dv_j_local_vec);
@@ -2970,7 +2988,8 @@ IBFEMethod::computeFluidTraction(const double data_time,
     VecGetArray(dv_j_local_vec, &dv_j_local_soln);
 
 #if (NDIM == 3)
-    PetscVector<double>* dw_j_petsc_vec = static_cast<PetscVector<double>*>(&dw_j_ghost_vec);
+	dw_j_ghost_vec->close();
+    PetscVector<double>* dw_j_petsc_vec = static_cast<PetscVector<double>*>(dw_j_ghost_vec);
     Vec dw_j_global_vec = dw_j_petsc_vec->vec();
     Vec dw_j_local_vec;
     VecGhostGetLocalForm(dw_j_global_vec, &dw_j_local_vec);
@@ -2978,12 +2997,12 @@ IBFEMethod::computeFluidTraction(const double data_time,
     VecGetArray(dw_j_local_vec, &dw_j_local_soln);
 #endif
 
-
     Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(d_fe_data_managers[part]->getLevelNumber());
     const Pointer<CartesianGridGeometry<NDIM> > grid_geom = level->getGridGeometry();
     //const IntVector<NDIM>& periodic_shift = grid_geom->getPeriodicShift();
     VectorValue<double> tau1, tau2, Tau1, Tau2, n, N;
     int local_patch_num = 0;
+
     for (PatchLevel<NDIM>::Iterator p(level); p; p++, ++local_patch_num)
     {
         // The relevant collection of elements.
@@ -3054,6 +3073,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
         TAU_qp.resize(NDIM * n_qp_patch);
         N_qp.resize(NDIM * n_qp_patch);
         std::fill(N_qp.begin(), N_qp.end(), 0.0);
+        std::fill(X_qp.begin(), X_qp.end(), 0.0);
 
         std::fill(WSS_i_qp.begin(), WSS_i_qp.end(), 0.0);
         std::fill(WSS_o_qp.begin(), WSS_o_qp.end(), 0.0);
@@ -3062,7 +3082,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
         std::fill(dv_j_qp.begin(), dv_j_qp.end(), 0.0);
         
 #if (NDIM == 3)
-	dw_j_qp.resize(NDIM * n_qp_patch);
+	    dw_j_qp.resize(NDIM * n_qp_patch);
         std::fill(dw_j_qp.begin(), dw_j_qp.end(), 0.0);
 #endif
         std::fill(P_i_qp.begin(), P_i_qp.end(), 0.0);
@@ -3077,7 +3097,6 @@ IBFEMethod::computeFluidTraction(const double data_time,
       //  std::fill(dv_x_o_qp.begin(), dv_x_o_qp.end(), 0.0);
 
         std::fill(TAU_qp.begin(), TAU_qp.end(), 0.0);
-        
 
         // Loop over the elements and compute the positions of the quadrature points.
         qrule.reset();
@@ -3150,12 +3169,45 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
             double* N_begin = &N_qp[NDIM * qp_offset];
             std::fill(N_begin, N_begin + NDIM * n_qp, 0.0);
+            
+            
+            
+            double* WSS_i_begin = &WSS_i_qp[NDIM * qp_offset];
+            std::fill(WSS_i_begin, WSS_i_begin + NDIM * n_qp, 0.0);
+
+            double* WSS_o_begin = &WSS_o_qp[NDIM * qp_offset];
+            std::fill(WSS_o_begin, WSS_o_begin + NDIM * n_qp, 0.0);
+            
+            
+            double* du_j_begin = &du_j_qp[NDIM * qp_offset];
+            std::fill(du_j_begin, du_j_begin + NDIM * n_qp, 0.0);
+
+            double* dv_j_begin = &dv_j_qp[NDIM * qp_offset];
+            std::fill(dv_j_begin, dv_j_begin + NDIM * n_qp, 0.0);
+            
+#if(NDIM == 3)	
+
+            double* dw_j_begin = &dw_j_qp[NDIM * qp_offset];
+            std::fill(dw_j_begin, dw_j_begin + NDIM * n_qp, 0.0);
+
+#endif   
+
+            double* P_j_begin = &P_j_qp[qp_offset];
+            std::fill(P_j_begin, P_j_begin + n_qp, 0.0);
+            
+                     
+            double* P_o_begin = &P_o_qp[qp_offset];
+            std::fill(P_o_begin, P_o_begin + n_qp, 0.0);
+            
+            double* P_i_begin = &P_i_qp[qp_offset];
+            std::fill(P_i_begin, P_i_begin + n_qp, 0.0);
             //~
             // Interpolate X, du, and dv at all of the quadrature points
             // via accumulation, i.e., X(qp) = sum_k X_k * phi_k(qp) for
             // each qp.
 
             //~
+          
             for (unsigned int qp = 0; qp < n_qp; ++qp)
             {
                 
@@ -3189,9 +3241,9 @@ IBFEMethod::computeFluidTraction(const double data_time,
                         WSS_i_qp[NDIM * (qp_offset + qp) + i] += WSS_i_node[k][i] * p_X;
                         WSS_o_qp[NDIM * (qp_offset + qp) + i] += WSS_o_node[k][i] * p_X;
                         du_j_qp[NDIM * (qp_offset + qp) + i] += du_j_node[k][i] * p_X;
-                        dv_j_qp[NDIM * (qp_offset + qp) + i] += dv_j_node[k][i] * p_X;
+                   //     dv_j_qp[NDIM * (qp_offset + qp) + i] += dv_j_node[k][i] * p_X;
 #if(NDIM == 3)	
-						dw_j_qp[NDIM * (qp_offset + qp) + i] += dw_j_node[k][i] * p_X;
+				//		dw_j_qp[NDIM * (qp_offset + qp) + i] += dw_j_node[k][i] * p_X;
 #endif 
                     }
                     N_qp[NDIM * (qp_offset + qp) + i] = n(i);
@@ -3215,6 +3267,8 @@ IBFEMethod::computeFluidTraction(const double data_time,
         // points.
         // Note: Values are interpolated only to those quadrature points that
         // are within the patch interior
+        
+       
 
         const Box<NDIM>& interp_box = patch->getBox();
         //~ Pointer<SideData<NDIM, double> >  u_sc_data = patch->getPatchData(u_data_idx);
@@ -3410,6 +3464,17 @@ IBFEMethod::computeFluidTraction(const double data_time,
     VecRestoreArray(WSS_o_local_vec, &WSS_o_local_soln);
     VecGhostRestoreLocalForm(WSS_o_global_vec, &WSS_o_local_vec);
     
+    VecRestoreArray(P_j_local_vec, &P_j_local_soln);
+    VecGhostRestoreLocalForm(P_j_global_vec, &P_j_local_vec);
+    
+    
+    VecRestoreArray(P_o_local_vec, &P_o_local_soln);
+    VecGhostRestoreLocalForm(P_o_global_vec, &P_o_local_vec);
+    
+    
+    VecRestoreArray(P_i_local_vec, &P_i_local_soln);
+    VecGhostRestoreLocalForm(P_i_global_vec, &P_i_local_vec);
+    
     
     VecRestoreArray(du_j_local_vec, &du_j_local_soln);
     VecGhostRestoreLocalForm(du_j_global_vec, &du_j_local_vec);
@@ -3453,6 +3518,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
 
     d_P_i_IB_ghost_vecs[part]->close();
     d_P_o_IB_ghost_vecs[part]->close();
+    d_P_j_IB_ghost_vecs[part]->close();
 
     //~ d_du_y_o_IB_ghost_vecs[part]->close();
     //~ d_dv_x_o_IB_ghost_vecs[part]->close();

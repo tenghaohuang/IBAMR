@@ -285,12 +285,6 @@ public:
     
 
     void computeFluidTraction(double current_time,
-                              libMesh::PetscVector<double>& P_j_ghost_vec,
-                              libMesh::PetscVector<double>& du_j_ghost_vec,
-                              libMesh::PetscVector<double>& dv_j_ghost_vec,
-#if (NDIM == 3)
-                              libMesh::PetscVector<double>& dw_j_ghost_vec,
-#endif
                               int U_data_idx,
                               int p_data_idx,
                               unsigned int part = 0);
