@@ -2249,16 +2249,16 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 #endif
 
 
-        computeFluidTraction(d_half_time,
-                             *P_j_ghost_vec,
-                             *du_j_ghost_vec,
-                             *dv_j_ghost_vec,
-#if (NDIM == 3)
-                             *dw_j_ghost_vec,
-#endif
-                             U_idx,
-                             p_idx,
-                             part);
+        //~ computeFluidTraction(d_half_time,
+                             //~ *P_j_ghost_vec,
+                             //~ *du_j_ghost_vec,
+                             //~ *dv_j_ghost_vec,
+//~ #if (NDIM == 3)
+                             //~ *dw_j_ghost_vec,
+//~ #endif
+                             //~ U_idx,
+                             //~ p_idx,
+                             //~ part);
                              
         
         // Reset time-dependent Lagrangian data.
@@ -2872,7 +2872,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
     boost::multi_array<double, 2> X_node, X0_node, WSS_i_node, WSS_o_node, n_qp_node;
     boost::multi_array<double, 1> P_i_node, P_o_node, P_j_node;
     boost::multi_array<double, 2> du_j_node, dv_j_node;
-    boost::multi_array<double, 1> dv_x_i_node, du_y_i_node, dv_x_o_node, du_y_o_node;
+   // boost::multi_array<double, 1> dv_x_i_node, du_y_i_node, dv_x_o_node, du_y_o_node;
     std::vector<double> X_qp, X0_qp, X_qp_m, X_qp_p, X_qp_mm, X_qp_pp;
     std::vector<double> P_i_qp, P_o_qp, P_j_qp, du_j_qp, dv_j_qp, du_y_o_qp, dv_x_o_qp, du_y_i_qp, dv_x_i_qp, p_qp, N_qp, WSS_i_qp,
         WSS_o_qp, TAU_qp;
@@ -5815,11 +5815,11 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
                                             w1_pp, wr0, wr1;
                                             
 #if (NDIM == 2)
-										boost::array<double, 2> LL, LU, UL, UU;
+										boost::array<double, NDIM> LL, LU, UL, UU;
 #endif
 #if (NDIM == 3)
                                         boost::array<double, 2> w2, wr2, w2_p, w2_m, w2_pp, w2_mm;
-                                        boost::array<double, 2> LLL, LUL, ULL, LUU, UUU, ULU, UUL, LLU;
+                                        boost::array<double, NDIM> LLL, LUL, ULL, LUU, UUU, ULU, UUL, LLU;
 #endif 
 					boost::array<double, NDIM> x_lower_axis, x_upper_axis;
 					const int local_sz = (*std::max_element(local_indices.begin(), local_indices.end())) + 1;
