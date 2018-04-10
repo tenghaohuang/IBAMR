@@ -521,10 +521,6 @@ void Solve6DOFSystemofEquations(const double dt,
 	I_w_new_iter.zero();
 	
 	
-	//pout <<  " The fluid torque is = << " << T << "\n\n";
-	
-//	pout <<" (Q_new_iter - Q_new).norm() ="<< (Q_new).norm()<<" (I_w_new_iter - I_w_new).norm() = " <<(I_w_new).norm() <<"\n\n";
-	
 	int iter = 0;
 	
 	while ( (Q_new_iter - Q_new).norm() > TOL || (I_w_new_iter - I_w_new).norm() > TOL )
@@ -662,7 +658,7 @@ bool run_example(int argc, char* argv[])
         const bool uses_visit = dump_viz_data && app_initializer->getVisItDataWriter();
         const bool uses_exodus = dump_viz_data && !app_initializer->getExodusIIFilename().empty();
         const string exodus_solid_filename = "solid_output.ex2"; // app_initializer->getExodusIIFilename();
-        const string exodus_bndry_filename = "bndry_output.ex2"; // app_initializer->getExodusIIFilename();
+        const string exodus_bndry_filename = app_initializer->getExodusIIFilename();
 
         const bool dump_restart_data = app_initializer->dumpRestartData();
         const int restart_dump_interval = app_initializer->getRestartDumpInterval();
@@ -1024,12 +1020,11 @@ bool run_example(int argc, char* argv[])
         double loop_time = time_integrator->getIntegratorTime();
         
         TensorValue<double> I_w_new, I_w_current, I_w_0;
-        //~ TensorValue<double> Q_new, Q_current;
+      
         VectorValue<double> V_current, W_current, V_new, W_new, F_b, F_s, Torque;
         VectorValue<double> x_com_current, x_com_new;
         double M_current, M_new;
-        
-        //~ Q_new.zero();
+
 
 		TensorValue<double> Q_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
 		TensorValue<double> Q_current(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
@@ -1185,218 +1180,3 @@ bool run_example(int argc, char* argv[])
     SAMRAIManager::shutdown();
     return true;
 } // run_example
-
- // ************ Some code following Amneet's approach for increasing accuracy.. might be added it later******* //
-/*
-
-void 
-calculateCodim0StructureKinematicsVelocity()
-{
-    // Theta_new = Theta_old + Omega_old*dt
- 
-        for (int d = 0; d < 3; ++d)
-            d_incremented_angle_from_reference_axis[d] +=
-                (d_rigid_rot_vel_current[d] - d_omega_com_def_current[d]) * dt;
-
-        //~ d_ib_kinematics[struct_no]->setKinematicsVelocity(d_FuRMoRP_new_time,
-                                                          //~ d_incremented_angle_from_reference_axis,
-                                                          //~ d_center_of_mass_new,
-                                                          //~ d_tagged_pt_position);
-
-        //calculateMomentumOfKinematicsVelocity(struct_no);
-    
-
-    return;
-} // calculateCodim0StructureKinematicsVelocity
-
-
-
-void
-calculateMomentumOfKinematicsVelocity(const int position_handle)
-{
-	
-	
-
-	System& U_new_system = solid_equation_systems->get_system("velocity_new");
-    U_new_system.solution->localize(*U_new_system.current_local_solution);
-    DofMap& U_new_dof_map = U_new_system.get_dof_map();
-    std::vector<std::vector<unsigned int> > U_new_dof_indices(NDIM);
-    FEType fe_type = U_new_dof_map.variable_type(0);
-
-    UniquePtr<FEBase> fe(FEBase::build(dim, fe_type));
-    fe->attach_quadrature_rule(qrule.get());
-    const std::vector<double>& JxW = fe->get_JxW();
-    const std::vector<std::vector<double> >& phi = fe->get_phi();
-
-    PetscVector<double>& U_new_petsc = dynamic_cast<PetscVector<double>&>(*U_new_system.current_local_solution.get());
-    U_new_petsc.close();
-    Vec U_new_global_vec = U_new_petsc.vec();
-    Vec U_new_local_ghost_vec;
-    VecGhostGetLocalForm(U_new_global_vec, &U_new_local_ghost_vec);
-    double* U_new_local_ghost_soln;
-    VecGetArray(U_new_local_ghost_vec, &U_new_local_ghost_soln);
-    
-    
-    
-    System& X_new_system = solid_equation_systems->get_system("position_new");
-    X_new_system.solution->localize(*X_new_system.current_local_solution);
-    DofMap& X_new_dof_map = X_new_system.get_dof_map();
-    std::vector<std::vector<unsigned int> > X_new_dof_indices(NDIM);
-    FEType fe_type = X_new_dof_map.variable_type(0);
-
-    UniquePtr<FEBase> fe(FEBase::build(dim, fe_type));
-    fe->attach_quadrature_rule(qrule.get());
-    const std::vector<double>& JxW = fe->get_JxW();
-    const std::vector<std::vector<double> >& phi = fe->get_phi();
-
-    PetscVector<double>& X_new_petsc = dynamic_cast<PetscVector<double>&>(*X_new_system.current_local_solution.get());
-    X_new_petsc.close();
-    Vec X_new_global_vec = X_new_petsc.vec();
-    Vec X_new_local_ghost_vec;
-    VecGhostGetLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
-    double* X_new_local_ghost_soln;
-    VecGetArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
-    
-    unsigned int part = 0;
-    MeshBase& mesh = solid_equation_systems->get_mesh();
-    const unsigned int dim = mesh.mesh_dimension();
-    AutoPtr<QBase> qrule = QBase::build(QGAUSS, dim, SEVENTH);
-	const int d_num_parts = 1;
-    
-    boost::multi_array<double, 2> X_new_node, U_new_node;
-    double X_new_qp[NDIM], U_new_qp[NDIM];
-    const MeshBase::const_element_iterator el_begin = mesh.active_local_elements_begin();
-    const MeshBase::const_element_iterator el_end = mesh.active_local_elements_end();
-    unsigned int n_qp_tot = 0;
-    
-    	
-	// Zero out linear momentum of kinematics velocity of the structure.
-    for (int d = 0; d < 3; ++d) d_vel_com_def_new[d] = 0.0;
-	
-	double U_com_def[NDIM] = { 0.0 };
-
-    for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
-    {
-		
-		const Elem* const elem = *el_it;
-        fe->reinit(elem);
-        for (unsigned int d = 0; d < NDIM; ++d)
-        {
-            X_new_dof_map.dof_indices(elem, X_new_dof_indices[d], d);
-            U_new_dof_map.dof_indices(elem, U_new_dof_indices[d], d);
-
-            //~ X_current_dof_map.dof_indices(elem, X_current_dof_indices[d], d);
-        }
-        get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_new_dof_indices);
-        get_values_for_interpolation(U_new_node, U_new_petsc, U_new_local_ghost_soln, U_new_dof_indices);
-
-        //~ get_values_for_interpolation(
-            //~ X_current_node, X_current_petsc, X_current_local_ghost_soln, X_current_dof_indices);
-
-        const unsigned int n_qp = qrule->n_points();
-        for (unsigned int qp = 0; qp < n_qp; ++qp)
-        {
-            interpolate(X_new_qp, qp, X_new_node, phi);
-            interpolate(U_new_qp, qp, U_new_node, phi);
-            
-            for (unsigned int d = 0; d < NDIM; ++d)
-            {
-              U_com_def[d] += * JxW[qp] * U_new_qp(d);
-            }
-            
-		}
-		for (int d = 0; d < NDIM; ++d)
-        {
-            d_vel_com_def_new[d] += U_com_def[d];
-        }
-        
-        n_qp_tot += qrule->n_points();
-
-	}
-	
-	SAMRAI_MPI::sumReduction(&d_vel_com_def_new[0], NDIM);
-
-    for (int d = 0; d < 3; ++d)
-    {
-       d_vel_com_def_new[d] /= d_vol_solid_new;
-    }
-  
-	// Calculate angular momentum.
-
-    // Zero out angular momentum of kinematics velocity of the structure.
-    for (int d = 0; d < 3; ++d) d_omega_com_def_new[d] = 0.0;
-    double R_cross_U_def[3] = { 0.0 };
-    
-    
-    for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
-    {
-		const Elem* const elem = *el_it;
-        fe->reinit(elem);
-        for (unsigned int d = 0; d < NDIM; ++d)
-        {
-            X_new_dof_map.dof_indices(elem, X_new_dof_indices[d], d);
-            U_new_dof_map.dof_indices(elem, U_new_dof_indices[d], d);
-
-            //~ X_current_dof_map.dof_indices(elem, X_current_dof_indices[d], d);
-        }
-        get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_new_dof_indices);
-        get_values_for_interpolation(U_new_node, U_new_petsc, U_new_local_ghost_soln, U_new_dof_indices);
-
-
-        const unsigned int n_qp = qrule->n_points();
-        for (unsigned int qp = 0; qp < n_qp; ++qp)
-        {
-			
-			        interpolate(X_new_qp, qp, X_new_node, phi);
-					interpolate(U_new_qp, qp, U_new_node, phi);
-#if (NDIM == 2)
-                    double x = X_new_qp(0) - d_center_of_mass_new[0];
-                    double y = X_new_qp(1) - d_center_of_mass_new[1];
-                    R_cross_U_def[2] += (x * (def_vel[1][lag_idx - offset]) - y * (def_vel[0][lag_idx - offset]));
-
-#endif
-
-#if (NDIM == 3)
-                    double x = X_new_qp(0) - d_center_of_mass_new[0];
-                    double y = X_new_qp(1) - d_center_of_mass_new[1];
-                    double z = X_new_qp(2) - d_center_of_mass_new[2];
-
-                    R_cross_U_def[0] += JxW[qp] * (y * U_new_qp(2) - z * U_new_qp(1));
-
-                    R_cross_U_def[1] += JxW[qp] * (-x * U_new_qp(2) + z * U_new_qp(0));
-
-                    R_cross_U_def[2] += JxW[qp] * (x * U_new_qp(1) - y * U_new_qp(0));
-#endif
-		}		
-	}
-	
-			
-	for (int d = 0; d < 3; ++d)
-    {
-       d_omega_com_def_new[d] += R_cross_U_def[d];
-    }
-	
-	// Find angular velocity of deformational velocity.
-#if (NDIM == 2)
-        d_omega_com_def_new[2] /= d_moment_of_inertia_new(2, 2);
-#endif
-
-#if (NDIM == 3)
-        solveSystemOfEqns(d_omega_com_def_new, d_moment_of_inertia_new);
-#endif
-
-
-
-    VecRestoreArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
-    VecGhostRestoreLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
-
-    VecRestoreArray(U_current_local_ghost_vec, &U_current_local_ghost_soln);
-    VecGhostRestoreLocalForm(U_current_global_vec, &U_current_local_ghost_vec);
-
-    return;
-} // calculateMomentumOfKinematicsVelocity
-
-
-
-					
-*/

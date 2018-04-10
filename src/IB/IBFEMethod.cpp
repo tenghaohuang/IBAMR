@@ -3520,21 +3520,21 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
     d_P_o_IB_ghost_vecs[part]->close();
     d_P_j_IB_ghost_vecs[part]->close();
 
-    //~ d_du_y_o_IB_ghost_vecs[part]->close();
-    //~ d_dv_x_o_IB_ghost_vecs[part]->close();
+    d_du_j_IB_ghost_vecs[part]->close();
+	d_dv_j_IB_ghost_vecs[part]->close();
     
     //~ d_du_y_i_IB_ghost_vecs[part]->close();
     //~ d_dv_x_i_IB_ghost_vecs[part]->close();
 
-//~ #if (NDIM == 3)
+#if (NDIM == 3)
 
-    //~ d_du_z_IB_ghost_vecs[part]->close();
+    d_dw_j_IB_ghost_vecs[part]->close();
     //~ d_dv_z_IB_ghost_vecs[part]->close();
 
     //~ d_dw_y_IB_ghost_vecs[part]->close();
     //~ d_dw_x_IB_ghost_vecs[part]->close();
 
-//~ #endif
+#endif
 
     return;
 } // computeFluidTraction
