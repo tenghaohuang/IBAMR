@@ -3269,15 +3269,15 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
                     const double& p_X = phi_X[k][qp];
                     P_i_qp[qp_offset + qp] += P_i_node[k] * p_X;
                     P_o_qp[qp_offset + qp] += P_o_node[k] * p_X;
-                //    du_y_o_qp[qp_offset + qp] += du_y_o_node[k] * p_X;
-                //    dv_x_o_qp[qp_offset + qp] += dv_x_o_node[k] * p_X;
+                   du_y_o_qp[qp_offset + qp] += du_y_o_node[k] * p_X;
+                   dv_x_o_qp[qp_offset + qp] += dv_x_o_node[k] * p_X;
                     P_j_qp[qp_offset + qp] += P_j_node[k] * p_X;
-//~ #if (NDIM == 3)	
-                    //~ dw_y_o_qp[qp_offset + qp] += dw_y_o_node[k] * p_X;
-                    //~ dw_x_o_qp[qp_offset + qp] += dw_x_o_node[k] * p_X;
-                    //~ dv_z_o_qp[qp_offset + qp] += dv_z_o_node[k] * p_X;
-                    //~ du_z_o_qp[qp_offset + qp] += du_z_o_node[k] * p_X;
-//~ #endif
+#if (NDIM == 3)	
+                    dw_y_o_qp[qp_offset + qp] += dw_y_o_node[k] * p_X;
+                    dw_x_o_qp[qp_offset + qp] += dw_x_o_node[k] * p_X;
+                    dv_z_o_qp[qp_offset + qp] += dv_z_o_node[k] * p_X;
+                    du_z_o_qp[qp_offset + qp] += du_z_o_node[k] * p_X;
+#endif
                 }
             }
             qp_offset += n_qp;
@@ -3414,9 +3414,8 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 					nnxomega = nn.cross(omega);
 					
 					 
-                   TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] -
-                                                                          P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
-                                                                          + d_mu * nnxomega(axis);
+                   TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(2.0 * d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] -
+                                                                          P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis] - d_mu * nnxomega(axis));
 
                 }
             }
