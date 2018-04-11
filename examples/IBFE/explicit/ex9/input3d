@@ -4,11 +4,12 @@ RHO = 2.0
 
 // grid spacing parameters
 // grid spacing parameters
-MAX_LEVELS = 5                            // maximum number of levels in locally refined grid
+MAX_LEVELS = 6                            // maximum number of levels in locally refined grid
 REF_RATIO  = 2                            // refinement ratio between levels
 N = 16                                    // actual    number of grid cells on coarsest grid level
 NFINEST = (REF_RATIO^(MAX_LEVELS - 1))*N  // effective number of grid cells on finest   grid level
 L = 16.0                                  // width of computational domain
+H = 3.0
 
 DX0 = L/N                                      // mesh width on coarsest grid level
 DX  = L/NFINEST                                // mesh width on finest   grid level
@@ -38,7 +39,7 @@ CONVECTIVE_FORM            = "ADVECTIVE"       // how to compute the convective 
 NORMALIZE_PRESSURE         = FALSE             // whether to explicitly force the  pressure to have mean zero
 ERROR_ON_DT_CHANGE         = TRUE              // whether to emit an error message if the time step size changes
 VORTICITY_TAGGING          = TRUE              // whether to tag cells for refinement based on vorticity thresholds
-TAG_BUFFER                 = 1                 // size of tag buffer used by grid generation algorithm
+TAG_BUFFER                 = 4                 // size of tag buffer used by grid generation algorithm
 REGRID_CFL_INTERVAL        = 0.5               // regrid whenever any material point could have moved 0.5 meshwidths since previous regrid
 OUTPUT_U                   = TRUE
 OUTPUT_P                   = TRUE
@@ -205,7 +206,7 @@ Main {
 // visualization dump parameters
    viz_writer                  = "VisIt","ExodusII"
    viz_dump_interval           = int(0.1/DT)
-   viz_dump_dirname            = "viz_IB3d_FSI"
+   viz_dump_dirname            = "viz_IB3d_FSI_L_Domain"
    visit_number_procs_per_file = 1
 
 // restart dump parameters
@@ -213,7 +214,7 @@ Main {
    restart_dump_dirname        = "restart_IB3d"
 
 // hierarchy data dump parameters
-   data_dump_interval          = int(0.02/DT)
+   data_dump_interval          = int(0.1/DT)
    data_dump_dirname           = "hier_data_IB3d_gravity"
 
 // timer dump parameters
@@ -221,9 +222,9 @@ Main {
 }
 
 CartesianGeometry {
-   domain_boxes = [ (0,0,0) , ( 7, 31, 7) ]
-   x_lo         =  -1.0,  -7.0, -1.0           // lower end of computational domain.
-   x_up         =   1.0,   1.0,  1.0           // upper end of computational domain.
+   domain_boxes = [ (0, 0, 0),(int((L/H)*N) - 1, N - 1, N - 1) ]
+   x_lo         =  -H/2,  -15.0, -H/2           // lower end of computational domain.
+   x_up         =   H/2,   1.0,  H/2           // upper end of computational domain.
    periodic_dimension = 0, 0, 0
 }
 
