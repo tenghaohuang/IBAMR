@@ -2508,7 +2508,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
 {
     interpolatePressureForTraction(p_data_idx, data_time, part);
 
-    ComputeVorticityForTraction(U_data_idx, data_time, part);
+    //ComputeVorticityForTraction(U_data_idx, data_time, part);
     
 
 
@@ -3414,8 +3414,9 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 					nnxomega = nn.cross(omega);
 					
 					 
-                   TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(2.0 * d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] -
-                                                                          P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis] - d_mu * nnxomega(axis));
+                   TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] -
+                                                                         P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
+                    //- d_mu * nnxomega(axis));
 
                 }
             }
