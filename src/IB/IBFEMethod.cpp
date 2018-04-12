@@ -850,7 +850,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                             CC = pjump[ic0][ic1];
                         }
 
-                        Q_data_axis[s] -= CC;
+                        Q_data_axis[s] += CC;
                     }
                 }
 #endif
@@ -869,7 +869,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                             {
                                 CC = pjump[ic0][ic1][ic2];
                             }
-                            Q_data_axis[s] -= CC;
+                            Q_data_axis[s] += CC;
                         }
                     }
                 }
@@ -951,7 +951,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 } // interpolatePressureForTraction (using jump [[p]])
 */
 
-    
+ 
  // This function calculates the pressure(P- and P+) on the interface using extrapolation in the normal direction
 void
 IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double data_time, unsigned int part)
@@ -2508,7 +2508,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
 {
     interpolatePressureForTraction(p_data_idx, data_time, part);
 
-    //ComputeVorticityForTraction(U_data_idx, data_time, part);
+    ComputeVorticityForTraction(U_data_idx, data_time, part);
     
 
 
@@ -3269,8 +3269,8 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
                     const double& p_X = phi_X[k][qp];
                     P_i_qp[qp_offset + qp] += P_i_node[k] * p_X;
                     P_o_qp[qp_offset + qp] += P_o_node[k] * p_X;
-                   du_y_o_qp[qp_offset + qp] += du_y_o_node[k] * p_X;
-                   dv_x_o_qp[qp_offset + qp] += dv_x_o_node[k] * p_X;
+                    du_y_o_qp[qp_offset + qp] += du_y_o_node[k] * p_X;
+                    dv_x_o_qp[qp_offset + qp] += dv_x_o_node[k] * p_X;
                     P_j_qp[qp_offset + qp] += P_j_node[k] * p_X;
 #if (NDIM == 3)	
                     dw_y_o_qp[qp_offset + qp] += dw_y_o_node[k] * p_X;
@@ -3410,13 +3410,14 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 					omega(1) = du_z_o_qp[local_indices[k]] - dw_x_o_qp[local_indices[k]];
 					omega(2) = dv_x_o_qp[local_indices[k]] - du_y_o_qp[local_indices[k]];
 #endif
-				
 					nnxomega = nn.cross(omega);
 					
-					 
-                   TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] -
-                                                                         P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
-                    //- d_mu * nnxomega(axis));
+  if (d_add_vorticity_term)
+            					 
+     TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(2.0 * d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] - P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis] - d_mu * nnxomega(axis));
+  else
+     TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] - P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
+  
 
                 }
             }
@@ -3912,8 +3913,7 @@ void IBFEMethod::calcHydroF(const double data_time, const int u_idx, const int p
 							def_grad_tensor(axis, d) = def_grad_tensor(d, axis);
 						}
 					}
-                //~ //    elem.vorticity = vel_grad_tensor(1,0) - vel_grad_tensor(0,1);
-                    Vector v_force; // = elem.viscous_force;
+                    Vector v_force; 
 					v_force = 2.0 * d_mu * def_grad_tensor * normal;
                     
                     
@@ -4455,7 +4455,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
             qp_offset += n_qp;
         }
         
-    
+   
 
         // Interpolate values from the Cartesian grid patch to the quadrature
         // points.
@@ -4659,6 +4659,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                             ic_lower_pz[d] = ic_center_pz[d];
                             ic_upper_pz[d] = ic_center_pz[d] + 1;
                         }
+                        ic_trimmed_lower_pz[d] = std::max(ic_lower_pz[d], ilower[d] - u_gcw[d]);
  
 						ic_trimmed_upper_pz[d] = std::min(ic_upper_pz[d], iupper[d] + u_gcw[d]);
  #endif                        
@@ -5157,6 +5158,9 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 
                         
 #endif
+      
+      
+
 #if (NDIM == 3)
 
                         if (axis == 0)
@@ -5319,8 +5323,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
             }
         }
         
-        
-      
+
         // Loop over the elements and accumulate the right-hand-side values.
         qrule.reset();
         qp_offset = 0;
@@ -8702,6 +8705,7 @@ IBFEMethod::putToDatabase(Pointer<Database> db)
     db->putBool("d_split_normal_force", d_split_normal_force);
     db->putBool("d_split_tangential_force", d_split_tangential_force);
     db->putBool("d_use_jump_conditions", d_use_jump_conditions);
+    db->putBool("d_add_vorticity_term", d_add_vorticity_term);
     db->putDouble("d_vel_interp_width", d_vel_interp_width);
     db->putBool("d_modify_vel_interp_jumps", d_modify_vel_interp_jumps);
 	db->putBool("d_use_higher_order_jump", d_use_higher_order_jump);
@@ -13205,6 +13209,7 @@ IBFEMethod::commonConstructor(const std::string& object_name,
     d_split_normal_force = false;
     d_split_tangential_force = false;
     d_use_jump_conditions = false;
+    d_add_vorticity_term = false;
     d_modify_vel_interp_jumps = false;
     d_use_higher_order_jump = false;
     d_vel_interp_width = 0.0;
@@ -13368,6 +13373,7 @@ IBFEMethod::getFromInput(Pointer<Database> db, bool /*is_from_restart*/)
     else if (db->isBool("split_forces"))
         d_split_tangential_force = db->getBool("split_forces");
     if (db->isBool("use_jump_conditions")) d_use_jump_conditions = db->getBool("use_jump_conditions");
+    if (db->isBool("add_vorticity_term")) d_add_vorticity_term = db->getBool("add_vorticity_term");
     if (db->isDouble("vel_interp_width")) d_vel_interp_width = db->getDouble("vel_interp_width");
     if (db->isBool("modify_vel_interp_jumps")) d_modify_vel_interp_jumps = db->getBool("modify_vel_interp_jumps");
     if (db->isBool("use_higher_order_jump")) d_use_higher_order_jump = db->getBool("use_higher_order_jump");
@@ -13425,6 +13431,7 @@ IBFEMethod::getFromRestart()
     d_split_normal_force = db->getBool("d_split_normal_force");
     d_split_tangential_force = db->getBool("d_split_tangential_force");
     d_use_jump_conditions = db->getBool("d_use_jump_conditions");
+    d_add_vorticity_term = db->getBool("d_add_vorticity_term");
     d_modify_vel_interp_jumps = db->getBool("d_modify_interp_jumps");
     d_use_higher_order_jump = db->getBool("d_use_higher_order_jump");
     d_vel_interp_width = db->isDouble("vel_interp_width");

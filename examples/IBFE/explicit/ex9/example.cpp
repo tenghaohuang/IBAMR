@@ -685,7 +685,7 @@ bool run_example(int argc, char* argv[])
 
         //~ const double grav_const =input_db->getDouble("RHO");
 
-        const double R = 0.5;
+        const double R = input_db->getDouble("R");
         if (NDIM == 2 && (elem_type == "TRI3" || elem_type == "TRI6"))
         {
 #ifdef LIBMESH_HAVE_TRIANGLE
@@ -1178,5 +1178,5 @@ bool run_example(int argc, char* argv[])
     } // cleanup dynamically allocated objects prior to shutdown
 
     SAMRAIManager::shutdown();
-    return 0;
+    return true;
 } // run_example
