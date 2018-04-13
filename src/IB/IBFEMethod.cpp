@@ -1718,7 +1718,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
                     P_i_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
-                    P_o_qp[local_indices[k]] = Q_data_axis_p[local_indices[k]]; //(2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]]);
+                    P_o_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]] + P_j_qp[local_indices[k]]; //2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
                 }
                 //~ }
             }
@@ -1792,6 +1792,9 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
         VecRestoreArray(X_local_vec, &X_local_soln);
         VecGhostRestoreLocalForm(X_global_vec, &X_local_vec);
+        
+        VecRestoreArray(P_j_local_vec, &P_j_local_soln);
+        VecGhostRestoreLocalForm(P_j_global_vec, &P_j_local_vec);
 
         d_fe_data_managers[part]->computeL2Projection(
             *P_i_vec, *P_i_rhs_vec, P_I_SYSTEM_NAME, d_use_consistent_mass_matrix);
@@ -3338,8 +3341,8 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
        // Using the jumps and the force defined as F = [tau]..This calculation should not be used for moving objects!!
        //~ (1.0/dA_da)*
 					//~ pout<< " da_da = " <<dA_da<<"\n\n";
-/*										
-				
+										
+/*
 			TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (- P_j_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
 			
 			
@@ -3388,8 +3391,8 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 							       
 		    }
 #endif
-
-	*/		
+*/
+			
                    
                 
                   // Using the exterior traciton tau_e
