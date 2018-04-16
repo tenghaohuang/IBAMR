@@ -1718,7 +1718,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
                     P_i_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
-                    P_o_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]] + P_j_qp[local_indices[k]]; //2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
+                    P_o_qp[local_indices[k]] = Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; //2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
                 }
                 //~ }
             }
