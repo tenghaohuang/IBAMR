@@ -1,12 +1,13 @@
-R  = 0.5
+R  = 0.35
 MU = 0.05       // the viscosity required to attain the specified Reynolds number
-RHO = 2.0
+RHO = 1.0
+RHO_S = 2.0
 
 // grid spacing parameters
 // grid spacing parameters
-MAX_LEVELS = 4                            // maximum number of levels in locally refined grid
+MAX_LEVELS = 5                            // maximum number of levels in locally refined grid
 REF_RATIO  = 2                            // refinement ratio between levels
-N = 32                                    // actual    number of grid cells on coarsest grid level
+N = 16                                    // actual    number of grid cells on coarsest grid level
 NFINEST = (REF_RATIO^(MAX_LEVELS - 1))*N  // effective number of grid cells on finest   grid level
 L = 16.0                                  // length of computational domain
 H = 4.0       							// width of the domain
@@ -20,17 +21,17 @@ USE_BOUNDARY_MESH = TRUE
 // solver parameters
 IB_DELTA_FUNCTION          = "PIECEWISE_LINEAR"            // the type of smoothed delta function to use for Lagrangian-Eulerian interaction
 SPLIT_NORMAL_FORCES        = TRUE             // whether to split interior and boundary forces
-SPLIT_TANGENTIAL_FORCES   =  TRUE
+SPLIT_TANGENTIAL_FORCES    = TRUE
 VEL_INTERP_WIDTH           = 1.0
 USE_JUMP_CONDITIONS        = TRUE             // whether to impose pressure jumps at fluid-structure interfaces
 USE_HIGHER_ORDER_JUMP	   = FALSE
-ADD_VORTICITY_TERM		   =  FALSE 
+ADD_VORTICITY_TERM	       = FALSE 
 MODIFY_VEL_INTERP_JUMPS    = TRUE
 USE_CONSISTENT_MASS_MATRIX = TRUE              // whether to use a consistent or lumped mass matrix
 IB_POINT_DENSITY           = 4.0               // approximate density of IB quadrature points for Lagrangian-Eulerian interaction
 SOLVER_TYPE                = "STAGGERED"       // the fluid solver to use (STAGGERED or COLLOCATED)
 CFL_MAX                    = 0.1               // maximum CFL number
-DT                         = 0.0005 // 0.1*CFL_MAX*DX    // maximum timestep size
+DT                         = 0.0001 // 0.1*CFL_MAX*DX    // maximum timestep size
 START_TIME                 = 0.0e0             // initial simulation time
 END_TIME                   = 10*DT             // final simulation time
 GROW_DT                    = 2.0e0             // growth factor for timesteps
@@ -50,8 +51,8 @@ OUTPUT_DIV_U               = TRUE
 ENABLE_LOGGING             = TRUE
 
 // model parameters
-KAPPA_S = 1000 // 200 //0.005*DX/DT^2
-ETA_S = 0.0 // 0.0*DX/DT
+KAPPA_S = 5000 // 200 //0.005*DX/DT^2
+ETA_S = 10.0 // 0.0*DX/DT
 
 // collocated solver parameters
 PROJECTION_METHOD_TYPE = "PRESSURE_UPDATE"
@@ -207,8 +208,8 @@ Main {
 
 // visualization dump parameters
    viz_writer                  = "VisIt","ExodusII"
-   viz_dump_interval           = int(0.1/DT)
-   viz_dump_dirname            = "viz_IB3d_FSI_Large_DOMAIN_No_Vorticity"
+   viz_dump_interval           = int(0.05/DT)
+   viz_dump_dirname            = "viz_IB3d_FSI_FINAL_Revert"
    visit_number_procs_per_file = 1
 
 // restart dump parameters
