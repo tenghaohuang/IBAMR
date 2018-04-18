@@ -79,10 +79,10 @@ namespace ModelData
 {
 static double kappa_s = 1.0e6;
 static double eta_s = 0.0;
-static double grav_const[3]={0.0,-9.81,0.0};
+static double grav_const[3]={0.0, -9.81,0.0};
 
 
-System* x_new_solid_system, * u_new_solid_system, * x_current_solid_system, * u_current_solid_system;
+System* x_new_solid_system, * u_new_solid_system;
 System* x_half_solid_system, * u_half_solid_system;
 void
 tether_force_function(VectorValue<double>& F,
@@ -123,6 +123,16 @@ tether_force_function(VectorValue<double>& F,
 }
 using namespace ModelData;
 
+static ofstream w_new_stream, v_new_stream, x_com_stream;
+void postprocess_data(Pointer<PatchHierarchy<NDIM> > patch_hierarchy,
+                      Pointer<INSHierarchyIntegrator> navier_stokes_integrator,
+                      Mesh& mesh,
+                      EquationSystems* equation_systems,
+                      const int iteration_num,
+                      const double loop_time,
+                      const string& data_dump_dirname);
+
+
 /*******************************************************************************
  * For each run, the input filename and restart information (if needed) must   *
  * be given on the command line.  For non-restarted case, command line is:     *
@@ -134,13 +144,10 @@ using namespace ModelData;
  *    executable <input file name> <restart directory> <restart number>        *
  *                                                                             *
  *******************************************************************************/
-void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
-										double& M_new,  // mass of the body
-										TensorValue<double>& I_w_current,  // moment of inertia tensor
+void calculateGeomQuantitiesOfStructure(double& M_new,  // mass of the body
 										TensorValue<double>& I_w_new,  // moment of inertia tensor
-										VectorValue<double>& x_com_current,        // current center of the mass
 										VectorValue<double>& x_com_new,        // new center of the mass
-										const double rho,
+										const double rho_s,
 										EquationSystems* solid_equation_systems)                  // mass density of the body (assumed to be uniform)
 										//~ libMesh::UniquePtr<EquationSystems> solid_equation_systems)
 {
@@ -148,28 +155,38 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
     // For now the eqs are setup only for one part but this will be extended
     // to multiple parts
     
-    MeshBase& mesh = solid_equation_systems->get_mesh();
+
+ 
+
+    // Extract the FE system and DOF map, and setup the FE object.
+    //~ System& X_new_system = solid_equation_systems->get_system("position_new");
+    //~ x_new_solid_system->solution->localize(*x_new_solid_system->current_local_solution);
+    
+                  
+     System& X_system = solid_equation_systems->get_system("position_new");
+     X_system.solution->localize(*X_system.current_local_solution);
+     const unsigned int X_sys_num = X_system.number();
+      MeshBase& mesh = solid_equation_systems->get_mesh();
+                  
+                 
+                
+      //~ MeshBase& mesh = solid_equation_systems->get_mesh();
     const unsigned int dim = mesh.mesh_dimension();
 
     AutoPtr<QBase> qrule = QBase::build(QGAUSS, dim, SEVENTH);
  
-
-    // Extract the FE system and DOF map, and setup the FE object.
-    System& X_new_system = solid_equation_systems->get_system("position_new");
-    x_new_solid_system->solution->localize(*x_new_solid_system->current_local_solution);
- 
-    DofMap& X_new_dof_map = x_new_solid_system->get_dof_map();
-    std::vector<std::vector<unsigned int> > X_new_dof_indices(NDIM);
-    FEType fe_type_new = X_new_dof_map.variable_type(0);
+    DofMap& X_dof_map = X_system.get_dof_map();
+    std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+    FEType fe_type = X_dof_map.variable_type(0);
     
     
 
-    UniquePtr<FEBase> fe_new(FEBase::build(dim, fe_type_new));
-    fe_new->attach_quadrature_rule(qrule.get());
-    const std::vector<double>& JxW_new = fe_new->get_JxW();
-    const std::vector<std::vector<double> >& phi_new = fe_new->get_phi();
+    UniquePtr<FEBase> fe(FEBase::build(dim, fe_type));
+    fe->attach_quadrature_rule(qrule.get());
+    const std::vector<double>& JxW = fe->get_JxW();
+    const std::vector<std::vector<double> >& phi = fe->get_phi();
 
-    PetscVector<double>& X_new_petsc = dynamic_cast<PetscVector<double>&>(*x_new_solid_system->current_local_solution.get());
+    PetscVector<double>& X_new_petsc = dynamic_cast<PetscVector<double>&>(*X_system.current_local_solution.get());
     X_new_petsc.close();
     Vec X_new_global_vec = X_new_petsc.vec();
     Vec X_new_local_ghost_vec;
@@ -177,94 +194,56 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
     double* X_new_local_ghost_soln;
     VecGetArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
     
-    
-    
-    System& x_current_system = solid_equation_systems->get_system("position_current");
-    x_current_solid_system->solution->localize(*x_current_solid_system->current_local_solution);
-    DofMap& X_current_dof_map = x_current_solid_system->get_dof_map();
-    std::vector<std::vector<unsigned int> > X_current_dof_indices(NDIM);
-    FEType fe_type = X_current_dof_map.variable_type(0);
-    
-    UniquePtr<FEBase> fe(FEBase::build(dim, fe_type));
-    fe->attach_quadrature_rule(qrule.get());
-    const std::vector<double>& JxW = fe->get_JxW();
-    const std::vector<std::vector<double> >& phi = fe->get_phi();
-    
-    
-    PetscVector<double>& X_current_petsc = dynamic_cast<PetscVector<double>&>(*x_current_solid_system->current_local_solution.get());
-    X_current_petsc.close();
-    Vec X_current_global_vec = X_current_petsc.vec();
-    Vec X_current_local_ghost_vec;
-    VecGhostGetLocalForm(X_current_global_vec, &X_current_local_ghost_vec);
-    double* X_current_local_ghost_soln;
-    VecGetArray(X_current_local_ghost_vec, &X_current_local_ghost_soln);
+
+   
     
     // 3D identity tensor.
     static const TensorValue<double> II(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-  
-    
-    x_com_current.zero();
+
     M_new = 0.0;
-    M_current = 0.0;
-    I_w_current.zero();
-    x_com_new.zero();
     I_w_new.zero();
+    x_com_new.zero();
     double vol_new = 0.0; //volume of the body
-    double vol_current = 0.0; //volume of the body
-   boost::multi_array<double, 2> X_new_node, X_current_node;
+   boost::multi_array<double, 2> X_new_node;
 
 
-
-
-    // Loop over the local elements to compute the local integrals.
-    boost::multi_array<double, 2> X_node_current, X_node_new;
 
    // double X_qp_new[NDIM], X_qp_current[NDIM], R_qp_current[NDIM], R_qp_new[NDIM];
-    VectorValue<double> X_qp_current, X_qp_new, R_qp_current, R_qp_new;
+    VectorValue<double> X_qp_new, R_qp_new;
     const MeshBase::const_element_iterator el_begin = mesh.active_local_elements_begin();
     const MeshBase::const_element_iterator el_end = mesh.active_local_elements_end();
     for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
     {
         const Elem* const elem = *el_it;
         fe->reinit(elem);
-        fe_new->reinit(elem);
         for (unsigned int d = 0; d < NDIM; ++d)
         {
-            X_new_dof_map.dof_indices(elem, X_new_dof_indices[d], d);
-            X_current_dof_map.dof_indices(elem, X_current_dof_indices[d], d);
+            X_dof_map.dof_indices(elem, X_dof_indices[d], d);
 
         }
-        get_values_for_interpolation(X_node_new, X_new_petsc, X_new_local_ghost_soln, X_new_dof_indices);
-        get_values_for_interpolation(X_node_current, X_current_petsc, X_current_local_ghost_soln, X_current_dof_indices);
+        get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_dof_indices);
 
 
         const unsigned int n_qp = qrule->n_points();
         for (unsigned int qp = 0; qp < n_qp; ++qp)
         {
-            interpolate(X_qp_new, qp, X_node_new, phi_new);
-            interpolate(X_qp_current, qp, X_node_current, phi);
+            interpolate(X_qp_new, qp, X_new_node, phi);
 
-
-
-            x_com_new += X_qp_new * JxW_new[qp];
-            x_com_current += X_qp_current * JxW[qp];
-
-            vol_current += JxW[qp];
-            vol_new += JxW_new[qp];
+            x_com_new += X_qp_new * JxW[qp];
+            
+            vol_new += JxW[qp];
 
         }
        
     }
     SAMRAI_MPI::sumReduction(&x_com_new(0), NDIM);
-    SAMRAI_MPI::sumReduction(&x_com_current(0), NDIM);
-    SAMRAI_MPI::sumReduction(&vol_new, 1);
-    SAMRAI_MPI::sumReduction(&vol_current, 1);
+    SAMRAI_MPI::sumReduction(&vol_new);
 
-
+                        
+                        
     x_com_new /= vol_new;
-    x_com_current /= vol_current;
-    M_current = rho * vol_current;
-    M_new = rho * vol_new;
+    M_new = rho_s * vol_new;
+    
     
     for (MeshBase::const_element_iterator el_it = el_begin; el_it != el_end; ++el_it)
     {
@@ -272,46 +251,34 @@ void calculateGeomQuantitiesOfStructure(double& M_current,  // mass of the body
         fe->reinit(elem);
         for (unsigned int d = 0; d < NDIM; ++d)
         {
-            X_new_dof_map.dof_indices(elem, X_new_dof_indices[d], d);
-            X_current_dof_map.dof_indices(elem, X_current_dof_indices[d], d);
+            X_dof_map.dof_indices(elem, X_dof_indices[d], d);
 
         }
-        get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_new_dof_indices);
-        get_values_for_interpolation(X_current_node, X_current_petsc, X_current_local_ghost_soln, X_current_dof_indices);
+        get_values_for_interpolation(X_new_node, X_new_petsc, X_new_local_ghost_soln, X_dof_indices);
 
 
         const unsigned int n_qp = qrule->n_points();
         for (unsigned int qp = 0; qp < n_qp; ++qp)
         {
-            interpolate(X_qp_new, qp, X_node_new, phi_new);
-            interpolate(X_qp_current, qp, X_node_current, phi);
+            interpolate(X_qp_new, qp, X_new_node, phi);
 
                       
 			R_qp_new = X_qp_new - x_com_new;
-			R_qp_current = X_qp_current - x_com_current;
 
             // Accumulate the inertia tensor:
-            I_w_current += rho * ((R_qp_current * R_qp_current) * II - outer_product(R_qp_current, R_qp_current)) * JxW[qp];
-            I_w_new += rho * ((R_qp_new * R_qp_new) * II - outer_product(R_qp_new, R_qp_new)) * JxW_new[qp];
+            I_w_new += rho_s * ((R_qp_new * R_qp_new) * II - outer_product(R_qp_new, R_qp_new)) * JxW[qp];
 
 
         }
     }
     
-     SAMRAI_MPI::sumReduction(&I_w_new(0, 0), dim * dim);
-     SAMRAI_MPI::sumReduction(&I_w_current(0, 0), dim * dim);
-
-
+     SAMRAI_MPI::sumReduction(&I_w_new(0, 0), NDIM * NDIM);
 
     VecRestoreArray(X_new_local_ghost_vec, &X_new_local_ghost_soln);
     VecGhostRestoreLocalForm(X_new_global_vec, &X_new_local_ghost_vec);
+   
     
-    VecRestoreArray(X_current_local_ghost_vec, &X_current_local_ghost_soln);
-    VecGhostRestoreLocalForm(X_current_global_vec, &X_current_local_ghost_vec);
-    
-    
-     x_new_solid_system->solution->close();
-     x_current_solid_system->solution->close();
+     X_system.solution->close();
 
 
     
@@ -405,7 +372,8 @@ void calculateFluidForceAndTorque(VectorValue<double>& F,              // net fo
 
 
 void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body force
-								 const double rho,        // mass density of the body (assumed to be uniform)
+								 const double rho,        // mass density of the fluid 
+								 const double rho_s,      //mass density of the body (assumed to be uniform)
 								 EquationSystems* solid_equation_systems)  
 {
 	
@@ -419,8 +387,8 @@ void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body 
     System& X_half_system = solid_equation_systems->get_system("position_half");
 
 
-    x_half_solid_system->solution->localize(*x_half_solid_system->current_local_solution);
-    DofMap& X_half_dof_map = x_half_solid_system->get_dof_map();
+    X_half_system.solution->localize(*X_half_system.current_local_solution);
+    DofMap& X_half_dof_map = X_half_system.get_dof_map();
     std::vector<std::vector<unsigned int> > X_half_dof_indices(NDIM);
     
     
@@ -454,14 +422,14 @@ void calculateGravitationalForce(VectorValue<double>& F_g, //gravitational body 
         {
 
 			 for (int d = 0; d < 3; ++d)
-				F_g(d) += rho * grav_const[d] * JxW[qp];
+				F_g(d) += (rho_s - rho) * grav_const[d] * JxW[qp];
             
 
         }
     }
     SAMRAI_MPI::sumReduction(&F_g(0), NDIM);
     
-    x_half_solid_system->solution->close();
+    X_half_system.solution->close();
     
 
 	return;
@@ -489,16 +457,14 @@ void getSkewSymmetricAngVelTensor(TensorValue<double>& Omega,
 }
 
 void Solve6DOFSystemofEquations(const double dt, 
+								VectorValue<double>& V_current,              // current linear velocity of the body
 								VectorValue<double>& V_new,              // linear velocity of the body
 								VectorValue<double>& W_new,              // angular velocity of the body
 								VectorValue<double>& x_new,             // New position of the body
 								TensorValue<double>& Q_new,                 // Rotation Matrix
-								VectorValue<double>& V_current,              // linear velocity of the body
-								VectorValue<double>& W_current,              // angular velocity of the body
-								VectorValue<double> x_current,            // Current position of the body
-								TensorValue<double>& Q_current,                 // Rotation Matrix
 								double M,							// Mass of the body
-								TensorValue<double> I_w_current,  // moment of inertia tensor
+								VectorValue<double> x_com,             // New position of the body
+								TensorValue<double> I_w_current,  // moment of inertia tensor of the body
 								TensorValue<double>& I_w_new,  // moment of inertia tensor
 								TensorValue<double> I_w_0,  // initial moment of inertia tensor
 								VectorValue<double> F_b,   // total external body force   
@@ -508,20 +474,32 @@ void Solve6DOFSystemofEquations(const double dt,
 {
 	
 	const double TOL = sqrt(std::numeric_limits<double>::epsilon());
+	
+	
 
-	// This time-stepping scheme is implemented from the paper by Akkerman et al., J of Applied Mechanics,2012
-	V_new = dt * ( F_b + F_s ) / M + V_current;	
-	x_new = 0.5 * dt * ( V_new + V_current) + x_current;
+	// This time-stepping scheme is implemented from the paper by Akkerman et al., J of Applied Mechanics,2012	
+
 	
-	
-	TensorValue<double> Q_new_iter, I_w_new_iter, Omega_current, Omega_new;
+	TensorValue<double> Q_new_iter, I_w_new_iter, Omega_current, Omega_new, Q_current;
+	VectorValue<double> W_current;
 	Q_new_iter.zero();
 	Omega_current.zero();
 	Omega_new.zero();
 	I_w_new_iter.zero();
 	
+	V_current = V_new;
+	W_current = W_new;
+	Q_current = Q_new;
+
+
+//	TBOX_ASSERT((x_new - x_com).size() <= TOL && (I_w_new - I_w_current).size()<=TOL); //checking to make sure the structure center of mass coincides with the 6DOF solution
 	
+	
+	V_new = dt * (F_b + F_s) / M + V_current;	
+	x_new = 0.5 * dt * ( V_new + V_current) + x_new;
+		
 	int iter = 0;
+	
 	
 	while ( (Q_new_iter - Q_new).norm() > TOL || (I_w_new_iter - I_w_new).norm() > TOL )
 	{
@@ -535,13 +513,11 @@ void Solve6DOFSystemofEquations(const double dt,
 		++iter;
 	}
 	
+	
 	pout <<"\n\n"<< "Number of 6DOF iterations = " << iter<<"\n\n";
 	
-	
-	V_current = V_new;
-	W_current = W_new;
-	Q_current = Q_new;
-	
+	pout <<"\n\n"<< " Translationl Velocity = " <<  V_new(1) <<"\n\n";
+
 	
     
 	return;
@@ -549,9 +525,10 @@ void Solve6DOFSystemofEquations(const double dt,
 
 
 void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
-										  VectorValue<double> V,              // linear velocity of the body
+										  VectorValue<double> V_new,              // linear velocity of the body
+										  VectorValue<double> V_current,              // linear velocity of the body
 										  VectorValue<double> W,              // angular velocity of the body
-										  const double loop_time,
+										  const double dt,
 										  EquationSystems& solid_equation_systems)
 {
 
@@ -572,14 +549,11 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                 const unsigned int U_sys_num = U_system.number();
                 NumericVector<double>& U_coords = *U_system.solution;
                 
-                System& X_current_system = solid_equation_systems.get_system("position_current");
-                NumericVector<double>& X_current_coords = *X_current_system.solution;
+
                 
                 System& X_half_system = solid_equation_systems.get_system("position_half");
                 NumericVector<double>& X_half_coords = *X_half_system.solution;
                 
-                System& U_current_system = solid_equation_systems.get_system("velocity_current");
-                NumericVector<double>& U_current_coords = *U_current_system.solution;
 				
 
                 for (MeshBase::node_iterator it = mesh.local_nodes_begin(); it != mesh.local_nodes_end(); ++it)
@@ -589,17 +563,20 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                     {
                         TBOX_ASSERT(n->n_vars(X_sys_num) == NDIM);
                         const libMesh::Point& X = *n;
-                        RR = X - x_com;
+                        RR = X ;
                         WxR = W.cross(RR);
-                        X_new = X + loop_time * (WxR + V);
+                        X_new = X + x_com + 0.5 * dt * (2.0 * WxR + (V_new + V_current));
+
+                        
                       
                         for (unsigned int d = 0; d < NDIM; ++d)
                         {
-                            const int dof_index = n->dof_number(U_sys_num, d, 0);
-                            X_coords.set(dof_index, X_new(d));
-							U_coords.set(dof_index, V(d) + WxR(d));
-                            X_current_coords.set(dof_index, X(d));
-                            X_half_coords.set(dof_index, 0.5 * (X(d) + X_new(d)));
+                            const int u_dof_index = n->dof_number(U_sys_num, d, 0);
+                            const int x_dof_index = n->dof_number(X_sys_num, d, 0);
+                            X_coords.set(x_dof_index, X_new(d));
+							U_coords.set(u_dof_index, V_new(d) + WxR(d));
+
+                            X_half_coords.set(x_dof_index, 0.5 * (X(d) + X_new(d)));
 
                         }
                     }
@@ -608,9 +585,7 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                 X_system.get_dof_map().enforce_constraints_exactly(X_system, &X_coords);
                 X_system.solution->localize(*X_system.current_local_solution);
                 
-                X_current_coords.close();
-                X_current_system.get_dof_map().enforce_constraints_exactly(X_current_system, &X_current_coords);
-                X_current_system.solution->localize(*X_current_system.current_local_solution);
+
                 
                 X_half_coords.close();
                 X_half_system.get_dof_map().enforce_constraints_exactly(X_half_system, &X_coords);
@@ -620,12 +595,6 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
                 U_system.get_dof_map().enforce_constraints_exactly(U_system, &U_coords);
                 U_system.solution->localize(*U_system.current_local_solution);
      
-                U_current_coords.close();
-                U_current_system.get_dof_map().enforce_constraints_exactly(U_current_system, &U_current_coords);
-                U_current_system.solution->localize(*U_current_system.current_local_solution);
-
-
-
 
     return;
 	
@@ -633,7 +602,7 @@ void updateVelocityAndPositionOfSolidPoints(VectorValue<double> x_com,
 } //updateVelocityAndPositionOfSolidPoints
 
 
-bool run_example(int argc, char* argv[])
+int main(int argc, char* argv[])
 {
     // Initialize libMesh, PETSc, MPI, and SAMRAI.
     LibMeshInit init(argc, argv);
@@ -681,7 +650,8 @@ bool run_example(int argc, char* argv[])
         const double dx = input_db->getDouble("DX");
         const double ds = input_db->getDouble("MFAC") * dx;
         string elem_type = input_db->getString("ELEM_TYPE");
-        const double rho = input_db->getDouble("RHO"); //For new we assume the fluid and the solid have the same density
+        const double rho = input_db->getDouble("RHO"); 
+        const double rho_s = input_db->getDouble("RHO_S");
 
         //~ const double grav_const =input_db->getDouble("RHO");
 
@@ -804,8 +774,6 @@ bool run_example(int argc, char* argv[])
         libMesh::EquationSystems* solid_equation_systems(new EquationSystems(solid_mesh));
         x_new_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("position_new");
         u_new_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("velocity_new");
-        x_current_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("position_current");
-        u_current_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("velocity_current");
         x_half_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("position_half");
         u_half_solid_system = &solid_equation_systems->add_system<ExplicitSystem>("velocity_half");
         
@@ -824,18 +792,6 @@ bool run_example(int argc, char* argv[])
             u_new_solid_system->add_variable(os.str(), order, family);
         }
         
-        for (int d = 0; d < NDIM; ++d)
-        {
-            std::ostringstream os;
-            os << "X_current_" << d;
-            x_current_solid_system->add_variable(os.str(), order, family);
-        }
-        for (int d = 0; d < NDIM; ++d)
-        {
-            std::ostringstream os;
-            os << "U_current_" << d;
-            u_current_solid_system->add_variable(os.str(), order, family);
-        }
         
        for (int d = 0; d < NDIM; ++d)
         {
@@ -879,29 +835,6 @@ bool run_example(int argc, char* argv[])
             X_new_system.get_dof_map().enforce_constraints_exactly(X_new_system, &X_new_coords);
             X_new_system.solution->localize(*X_new_system.current_local_solution);
             
-            System& X_current_system = solid_equation_systems->get_system("position_current");
-            const unsigned int X_current_sys_num = X_current_system.number();
-            NumericVector<double>& X_current_coords = *X_current_system.solution;
-            
-            
-            for (MeshBase::node_iterator it = mesh.local_nodes_begin(); it != mesh.local_nodes_end(); ++it)
-            {
-                Node* n = *it;
-                if (n->n_vars(X_current_sys_num))
-                {
-                    TBOX_ASSERT(n->n_vars(X_current_sys_num) == NDIM);
-                    const libMesh::Point& X = *n;
-                    libMesh::Point x = X;
-                    for (unsigned int d = 0; d < NDIM; ++d)
-                    {
-                        const int dof_index = n->dof_number(X_current_sys_num, d, 0);
-                        X_current_coords.set(dof_index, x(d));
-                    }
-                }
-            }
-            X_current_coords.close();
-            X_current_system.get_dof_map().enforce_constraints_exactly(X_current_system, &X_current_coords);
-            X_current_system.solution->localize(*X_current_system.current_local_solution);
             
             
             
@@ -931,11 +864,6 @@ bool run_example(int argc, char* argv[])
             
         }
 
-        x_current_solid_system->assemble_before_solve = false;
-        x_current_solid_system->assemble();
-
-        u_current_solid_system->assemble_before_solve = false;
-        u_current_solid_system->assemble();
 
         x_new_solid_system->assemble_before_solve = false;
         x_new_solid_system->assemble();
@@ -1019,37 +947,41 @@ bool run_example(int argc, char* argv[])
         int iteration_num = time_integrator->getIntegratorStep();
         double loop_time = time_integrator->getIntegratorTime();
         
-        TensorValue<double> I_w_new, I_w_current, I_w_0;
+        TensorValue<double> I_w_new, I_w_0, I_w_current;
       
-        VectorValue<double> V_current, W_current, V_new, W_new, F_b, F_s, Torque;
-        VectorValue<double> x_com_current, x_com_new;
-        double M_current, M_new;
+        VectorValue<double>  W_current, V_new,V_current, W_new, F_b, F_s, Torque;
+        VectorValue<double> x_com_new, x_com;
+        double M_new;
 
 
 		TensorValue<double> Q_new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
 		TensorValue<double> Q_current(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-        I_w_current.zero();
         I_w_new.zero();
+        I_w_current.zero();
         x_com_new.zero();
-        x_com_current.zero();
         W_new.zero();
         V_new.zero();
-        W_current.zero();
         V_current.zero();
+        W_current.zero();
         Torque.zero();
         F_s.zero();
         F_b.zero();
+
         
         //****************************** Initialize RBD parameters **************************************//
        
        
 
-	calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
-		
-	calculateGravitationalForce(F_b, rho, solid_equation_systems);
+	calculateGeomQuantitiesOfStructure( M_new, I_w_current, x_com, rho_s, solid_equation_systems);
 	
 	I_w_0 = I_w_current;
-	calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+	I_w_new = I_w_current;
+	x_com_new = x_com;
+		
+	calculateGravitationalForce(F_b, rho, rho_s, solid_equation_systems);
+	
+
+	calculateFluidForceAndTorque(F_s, Torque, x_com_new, bndry_mesh, bndry_equation_systems);
 
 	//******************************************************************************//
 
@@ -1072,13 +1004,23 @@ bool run_example(int argc, char* argv[])
             }
         }
         
-
+        if (SAMRAI_MPI::getRank() == 0)
+        {
+            
+            w_new_stream.open("w_3D_new.curve", ios_base::out | ios_base::trunc);
+            x_com_stream.open("x_3D_new.curve", ios_base::out | ios_base::trunc);
+            v_new_stream.open("v_3D_new.curve", ios_base::out | ios_base::trunc);
+            w_new_stream.precision(10);
+            x_com_stream.precision(10);
+            v_new_stream.precision(10);
+            
+        }
 
         // Main time step loop.
         double loop_time_end = time_integrator->getEndTime();
         double dt = 0.0;
         
-
+  
 
         while (!MathUtilities<double>::equalEps(loop_time, loop_time_end) && time_integrator->stepsRemaining())
         {
@@ -1089,32 +1031,37 @@ bool run_example(int argc, char* argv[])
             pout << "+++++++++++++++++++++++++++++++++++++++++++++++++++\n";
             pout << "At beginning of timestep # " << iteration_num << "\n";
             pout << "Simulation time is " << loop_time << "\n";
-
-
+			
             dt = time_integrator->getMaximumTimeStepSize();
            
-            time_integrator->advanceHierarchy(dt);
+
+           time_integrator->advanceHierarchy(dt);
             
-        //****************************** RBD code **************************************//
-	
-	calculateGeomQuantitiesOfStructure(M_current, M_new, I_w_current, I_w_new, x_com_current, x_com_new, rho, solid_equation_systems);
+				//****************************** RBD code **************************************//
+			
+			calculateGeomQuantitiesOfStructure(M_new, I_w_current, x_com, rho_s, solid_equation_systems);
 
-	calculateGravitationalForce(F_b, rho, solid_equation_systems);
-	calculateFluidForceAndTorque(F_s, Torque, x_com_current, bndry_mesh, bndry_equation_systems);
+			calculateGravitationalForce(F_b, rho,  rho_s, solid_equation_systems);
+			calculateFluidForceAndTorque(F_s, Torque, x_com_new, bndry_mesh, bndry_equation_systems);
 
 
-	Solve6DOFSystemofEquations(dt, V_new, W_new, x_com_new, Q_new,
-								   V_current, W_current, x_com_current, Q_current, M_current,  I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
-								   	
-								   
-	updateVelocityAndPositionOfSolidPoints(x_com_new, V_new, W_new, loop_time, *solid_equation_systems);
-			              
+			Solve6DOFSystemofEquations(dt, V_new, V_current, W_new, x_com_new, Q_new, M_new,  x_com, I_w_current, I_w_new, I_w_0, F_b, F_s,Torque);
+											
+					
+			loop_time += dt;		
+		    
+		    					   
+			updateVelocityAndPositionOfSolidPoints(x_com, V_new, V_current, W_new, dt, *solid_equation_systems);
+			
+			
 
-	//******************************************************************************//
+								  
+
+			//******************************************************************************//
 
             
             
-            loop_time += dt;
+            
 
             pout << "\n";
             pout << "At end       of timestep # " << iteration_num << "\n";
@@ -1156,19 +1103,36 @@ bool run_example(int argc, char* argv[])
                 TimerManager::getManager()->print(plog);
             }
             
+
+				if (SAMRAI_MPI::getRank() == 0)
+				{
+					x_com_stream << loop_time << " " << x_com_new(0) << " " << x_com_new(1) << " " << x_com_new(2) << endl;
+					v_new_stream << loop_time << " " << V_new(0) << " " << V_new(1) << " " << V_new(2) << endl;
+					w_new_stream << loop_time << " " << W_new(0) << " " << W_new(1) << " " << W_new(2) << endl;
+
+					
+					
+				}
+            
+            
             
             
         }
         
-         u_half_solid_system->clear();
-         x_half_solid_system->clear();
          x_new_solid_system->clear();
          u_new_solid_system->clear();
-         x_current_solid_system->clear();
-         u_current_solid_system->clear();
 		 solid_equation_systems->clear();
 		 bndry_equation_systems->clear(); 
 
+
+        // Close the logging streams.
+        if (SAMRAI_MPI::getRank() == 0)
+        {
+            x_com_stream.close();
+            v_new_stream.close();
+            w_new_stream.close();
+
+        }
         // Cleanup Eulerian boundary condition specification objects (when
         // necessary).
         for (unsigned int d = 0; d < NDIM; ++d) delete u_bc_coefs[d];
@@ -1180,3 +1144,5 @@ bool run_example(int argc, char* argv[])
     SAMRAIManager::shutdown();
     return true;
 } // run_example
+
+
