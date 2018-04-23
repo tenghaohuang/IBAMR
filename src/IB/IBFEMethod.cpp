@@ -1733,6 +1733,8 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 //~
                 //~ }
 
+
+
                 P_i_dof_map_cache.dof_indices(elem, P_i_dof_indices);
                 P_i_rhs_e.resize(static_cast<int>(P_i_dof_indices.size()));
 
@@ -1755,7 +1757,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                     // element type and quadrature rule, not on the element
                     // geometry.
                     //~ U_fe->attach_quadrature_rule(qrule.get());
-                    //~ X_fe->attach_quadrature_rule(qrule.get());
+                    X_fe->attach_quadrature_rule(qrule.get());
                     //~ if (X_fe != U_fe) X_fe->reinit(elem);
                 }
                 //~ U_fe->reinit(elem);
@@ -1773,6 +1775,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                         P_o_rhs_e(k) += P_o_qp[idx] * p_JxW;
                     }
                 }
+         
 
                 P_i_dof_map.constrain_element_vector(P_i_rhs_e, P_i_dof_indices);
                 P_i_rhs_vec->add_vector(P_i_rhs_e, P_i_dof_indices);
@@ -2181,13 +2184,11 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 #if (NDIM == 3)
         dw_j_vec->localize(*dw_j_ghost_vec);
 #endif
-
-
-        computeFluidTraction(d_half_time,
+       if (d_use_jump_conditions)
+			computeFluidTraction(d_half_time,
                              U_idx,
                              p_idx,
-                             part);
-                             
+                             part);                
         
         // Reset time-dependent Lagrangian data.
         d_X_new_vecs[part]->close();
@@ -2446,6 +2447,7 @@ IBFEMethod::computeFluidTraction(const double data_time,
                                  unsigned int part)
 {
     interpolatePressureForTraction(p_data_idx, data_time, part);
+
 
     ComputeVorticityForTraction(U_data_idx, data_time, part);
     
@@ -3920,15 +3922,8 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 
 
 #if (NDIM == 3)
-
     NumericVector<double>* dw_o_vec = d_dw_o_half_vecs[part];
-
-
 #endif
-
-
-		
-		
 
     NumericVector<double>* du_j_ghost_vec = d_du_j_IB_ghost_vecs[part];
     NumericVector<double>* dv_j_ghost_vec = d_dv_j_IB_ghost_vecs[part];
@@ -4120,8 +4115,8 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 
     int local_patch_num = 0;
     
-   
-
+    
+  
     for (PatchLevel<NDIM>::Iterator p(level); p; p++, ++local_patch_num)
     {
         // The relevant collection of elements.
@@ -4296,6 +4291,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                         du_j_qp[NDIM * (qp_offset + qp) + i] += du_j_node[k][i] * p_X;
                         dv_j_qp[NDIM * (qp_offset + qp) + i] += dv_j_node[k][i] * p_X;
 #if (NDIM == 3)
+						X_qp_pz[NDIM * (qp_offset + qp) + i] += X_node[k][i] * p_X;
                         dw_j_qp[NDIM * (qp_offset + qp) + i] += dw_j_node[k][i] * p_X;
 #endif
                     }
@@ -4314,6 +4310,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
         }
         
    
+  
 
         // Interpolate values from the Cartesian grid patch to the quadrature
         // points.
@@ -4361,6 +4358,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 			boost::array<double, NDIM> X_shifted_pz;
 			boost::array<double, NDIM> X_cell_pz, ic_center_pz;
             boost::array<double, 2> w2, wr2, wr2_px, w2_px, w2_py;
+            boost::array<double, 2> wr2_pz, wr0_pz, wr1_pz, wr2_py;
             boost::array<double, NDIM> LLL, LUL, ULL, LUU, UUU, ULU, UUL, LLU;
             boost::array<double, 2> w0_pz, w1_pz, w2_pz;
             boost::array<int, NDIM> ic_trimmed_lower_pz, ic_trimmed_upper_pz, ic_lower_pz, ic_upper_pz;
@@ -4415,14 +4413,13 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                     for (int d = 0; d < NDIM; ++d)
                     {
                         X_shifted[d] = X_qp[d + s * NDIM] + periodic_shifts[d + k * NDIM];
-                    }
-                    X_shifted_px[0] = X_qp_px[s * NDIM] + periodic_shifts[k * NDIM];
-
-                    X_shifted_py[1] = X_qp_py[1 + s * NDIM] + periodic_shifts[1 + k * NDIM];
-
+                        X_shifted_px[d] = X_qp_px[d + s * NDIM] + periodic_shifts[d + k * NDIM];
+                        X_shifted_py[d] = X_qp_py[d + s * NDIM] + periodic_shifts[d + k * NDIM];
 #if (NDIM == 3)
-                    X_shifted_pz[2] = X_qp_pz[2 + s * NDIM] + periodic_shifts[2 + k * NDIM];
+						X_shifted_pz[d] = X_qp_pz[d + s * NDIM] + periodic_shifts[d + k * NDIM];
 #endif
+                    }
+
 
 
                     for (unsigned int d = 0; d < NDIM; ++d)
@@ -4615,56 +4612,74 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                         w2_px[0] = (X_cell_px[2] - X_shifted_px[2]) / dx[2];
                         wr2_px[0] = w2_px[0];
                         w2_px[1] = 1.0 - w2_px[0];
+                        wr2_px[1] = -w2_px[1];
                     }
                     else
                     {
                         w2_px[0] = 1.0 + (X_cell_px[2] - X_shifted_px[2]) / dx[2];
+                        wr2_px[0] =  w2_px[0]; 
                         w2_px[1] = 1.0 - w2_px[0];
+                        wr2_px[1] = -w2_px[1];
                     }
 
                     if (X_shifted_py[2] <= X_cell_py[2])
                     {
                         w2_py[0] = (X_cell_py[2] - X_shifted_py[2]) / dx[2];
-                        w2_py[1] = 1.0 - w2_py[0];
+                        wr2_py[0] = w2_py[0];
+                        w2_py[1] =  1.0 - w2_py[0];
+                        wr2_py[1] = - w2_py[1];
                     }
                     else
                     {
                         w2_py[0] = 1.0 + (X_cell_py[2] - X_shifted_py[2]) / dx[2];
+                        wr2_py[0] =  w2_py[0];
                         w2_py[1] = 1.0 - w2_py[0];
+                        wr2_py[1] = - w2_py[1];
                     }
 
                     if (X_shifted_pz[0] <= X_cell_pz[0])
                     {
                         w0_pz[0] = (X_cell_pz[0] - X_shifted_pz[0]) / dx[0];
-
+                        wr0_pz[0] = w0_pz[0];
                         w0_pz[1] = 1.0 - w0_pz[0];
+                        wr0_pz[1] = - w0_pz[1];
                     }
                     else
                     {
                         w0_pz[0] = 1.0 + (X_cell_pz[0] - X_shifted_pz[0]) / dx[0];
+                        wr0_pz[0] = w0_pz[0];
                         w0_pz[1] = 1.0 - w0_pz[0];
+                        wr0_pz[1] = -  w0_pz[1];
                     }
 
                     if (X_shifted_pz[1] <= X_cell_pz[1])
                     {
                         w1_pz[0] = (X_cell_pz[1] - X_shifted_pz[1]) / dx[1];
+                        wr1_pz[0] = w1_pz[0];
                         w1_pz[1] = 1.0 - w1_pz[0];
+                        wr1_pz[1] = - w1_pz[1];
                     }
                     else
                     {
                         w1_pz[0] = 1.0 + (X_cell_pz[1] - X_shifted_pz[1]) / dx[1];
+                        wr1_pz[0] = w1_pz[0];
                         w1_pz[1] = 1.0 - w1_pz[0];
+                        wr1_pz[1] = - w1_pz[1];
                     }
 
                     if (X_shifted_pz[2] <= X_cell_pz[2])
                     {
                         w2_pz[0] = (X_cell_pz[2] - X_shifted_pz[2]) / dx[2];
+                        wr2_pz[0] = w2_pz[0];
                         w2_pz[1] = 1.0 - w2_pz[0];
+                        wr2_pz[1] = - w2_pz[1];
                     }
                     else
                     {
                         w2_pz[0] = 1.0 + (X_cell_pz[2] - X_shifted_pz[2]) / dx[2];
+                        wr2_pz[0] = w2_pz[0];
                         w2_pz[1] = 1.0 - w2_pz[0];
+                        wr2_pz[1] = - w2_pz[1];
                     }
 
 #endif
@@ -4731,9 +4746,6 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                       [range(ic_trimmed_lower[1], ic_trimmed_upper[1] + 1)]
                                       [range(ic_trimmed_lower[2], ic_trimmed_upper[2] + 1)]);
 #endif
-
-
-
 
     
 
@@ -4845,7 +4857,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 #endif
 
 
-/*
+
 #if (NDIM == 3)
                     for (int d = 0; d < NDIM; ++d)
                     {
@@ -4948,7 +4960,9 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                         (UUU[0] * dw_j_qp[s * NDIM] + UUU[1] * dw_j_qp[1 + s * NDIM] + UUU[2] * dw_j_qp[2 + s * NDIM]);
 #endif
 
-*/
+
+
+
                     for (int d = 0; d < u_depth; ++d)
                     {
                         Q_data_axis[s] = 0.0;
@@ -5142,9 +5156,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 
 
                 }
-
-
-                    
+ 
                                                 for (unsigned int k = 0; k < nindices; ++k)
                                                 {
                                                     U_qp[NDIM * local_indices[k] + axis] = Q_data_axis[local_indices[k]];    
@@ -5183,6 +5195,8 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
             }
         }
         
+  
+        
 
         // Loop over the elements and accumulate the right-hand-side values.
         qrule.reset();
@@ -5208,7 +5222,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                 // element type and quadrature rule, not on the element
                 // geometry.
                 //~ U_fe->attach_quadrature_rule(qrule.get());
-                //~ X_fe->attach_quadrature_rule(qrule.get());
+                X_fe->attach_quadrature_rule(qrule.get());
                 //~ if (X_fe != U_fe) X_fe->reinit(elem);
             }
             //~ U_fe->reinit(elem);
