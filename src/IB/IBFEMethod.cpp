@@ -3310,7 +3310,7 @@ if (d_add_vorticity_term)
 
 #if(NDIM == 3)
 					TensorValue<double> DU_O(du_o_qp[NDIM * local_indices[k]], du_o_qp[NDIM * local_indices[k] + 1], du_o_qp[NDIM * local_indices[k] + 2],
-											 dv_o_qp[NDIM * local_indices[k]], dv_o_qp[NDIM * local_indices[k] + 1], du_o_qp[NDIM * local_indices[k] + 2],
+											 dv_o_qp[NDIM * local_indices[k]], dv_o_qp[NDIM * local_indices[k] + 1], dv_o_qp[NDIM * local_indices[k] + 2],
 											 dw_o_qp[NDIM * local_indices[k]], dw_o_qp[NDIM * local_indices[k] + 1], dw_o_qp[NDIM * local_indices[k] + 2]);
 											 
 					TensorValue<double> DTU_O(du_o_qp[NDIM * local_indices[k]], dv_o_qp[NDIM * local_indices[k]], dw_o_qp[NDIM * local_indices[k]],
