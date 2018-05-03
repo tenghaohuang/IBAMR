@@ -2446,11 +2446,10 @@ IBFEMethod::computeFluidTraction(const double data_time,
                                  const int p_data_idx,
                                  unsigned int part)
 {
-    interpolatePressureForTraction(p_data_idx, data_time, part);
+	
+	
+	
 
-
-    ComputeVorticityForTraction(U_data_idx, data_time, part);
-    
 
 
     NumericVector<double>* WSS_i_vec = NULL;
@@ -2861,6 +2860,23 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 
     
 #endif
+
+	const int finest_ln = d_hierarchy->getFinestLevelNumber();
+    RefineAlgorithm<NDIM> ghost_fill_alg;
+    ghost_fill_alg.registerRefine(p_data_idx, p_data_idx, p_data_idx, NULL);
+    Pointer<RefineSchedule<NDIM> > ghost_fill_schd =
+            ghost_fill_alg.createSchedule(d_hierarchy->getPatchLevel(finest_ln));
+
+	ghost_fill_schd->fillData(data_time);
+
+	
+    interpolatePressureForTraction(p_data_idx, data_time, part);
+
+
+    ComputeVorticityForTraction(U_data_idx, data_time, part);
+    
+
+
 
     Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(d_fe_data_managers[part]->getLevelNumber());
     const Pointer<CartesianGridGeometry<NDIM> > grid_geom = level->getGridGeometry();
