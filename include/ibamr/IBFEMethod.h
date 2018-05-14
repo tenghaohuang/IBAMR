@@ -132,7 +132,7 @@ public:
     static const std::string TAU_SYSTEM_NAME;
     static const std::string VELOCITY_SYSTEM_NAME;
 
-    SAMRAI::tbox::Pointer<SAMRAI::pdat::SideVariable<NDIM, double> > mask_var;
+    SAMRAI::tbox::Pointer<SAMRAI::pdat::CellVariable<NDIM, double> > mask_var;
     int mask_current_idx, mask_new_idx, mask_scratch_idx;
 
     /*!
@@ -281,7 +281,6 @@ public:
 
     void computeFluidTraction(double current_time,
                               int U_data_idx,
-                              int p_data_idx,
                               unsigned int part = 0);
 
     void interpolatePressureForTraction(int p_data_idx, double data_time, unsigned int part = 0);
