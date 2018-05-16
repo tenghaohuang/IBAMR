@@ -1399,18 +1399,24 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 #endif
 
             const double* const dx = pgeom->getDx();
-			const int p_ghost_num = 2;
+			
             double diag_dis = 0.0;
             for (unsigned int d = 0; d < NDIM; ++d)
             {
                 diag_dis += dx[d] * dx[d];
-                x_lower_gh[d] = x_lower[d] - (static_cast<double>(p_ghost_num)) * dx[d];
-				x_upper_gh[d] = x_upper[d] + (static_cast<double>(p_ghost_num)) * dx[d];
             }
-            const double dh = d_vel_interp_width * sqrt(diag_dis);
+            const double dh = d_p_interp_width * sqrt(diag_dis);
             
             double* x_upper_ghost = &x_upper_gh[0];
             double* x_lower_ghost = &x_lower_gh[0];
+            const int p_ghost_num = static_cast<double>(ceil(dh/patch_dx_min));
+            
+            for (unsigned int d = 0; d < NDIM; ++d)
+            {
+				x_lower_gh[d] = x_lower[d] - (static_cast<double>(p_ghost_num)) * dx[d];
+				x_upper_gh[d] = x_upper[d] + (static_cast<double>(p_ghost_num)) * dx[d];
+				
+			}
 
             // Setup vectors to store the values of U and X at the quadrature
             // points.
@@ -1554,6 +1560,9 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
            const int p_depth = p_data->getDepth();
            
   
+  
+            LEInteractor::interpolate(P_i_qp, 1, X_qp_m, NDIM, p_data, patch, ghost_box, "IB_4");
+
            
             std::vector<int> local_indices;
             local_indices.clear();
@@ -1710,8 +1719,8 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                             ic_lower_p[d] = ic_center_p[d];
                             ic_upper_p[d] = ic_center_p[d] + 1;
                         }
-                        ic_trimmed_lower_p[d] = std::max(ic_lower_p[d], ilower_pm[d] - p_ghost_num);
-                        ic_trimmed_upper_p[d] = std::min(ic_upper_p[d], iupper_pm[d] + p_ghost_num);
+                        ic_trimmed_lower_p[d] = std::max(ic_lower_p[d], ilower[d] - p_gcw[d]);
+                        ic_trimmed_upper_p[d] = std::min(ic_upper_p[d], iupper[d] + p_gcw[d]);
 
                         ic_center_m[d] = ilower_pm[d] + NINT((X_shifted_m[d] - x_lower_axis_pm[d]) / dx[d] - 0.5 );
                         X_cell_m[d] = x_lower_axis_pm[d] + (static_cast<double>(ic_center_m[d] - ilower_pm[d]) + 0.5) * dx[d];
@@ -1726,8 +1735,8 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                             ic_lower_m[d] = ic_center_m[d];
                             ic_upper_m[d] = ic_center_m[d] + 1;
                         }
-                        ic_trimmed_lower_m[d] = std::max(ic_lower_m[d], ilower_pm[d] - p_ghost_num);
-                        ic_trimmed_upper_m[d] = std::min(ic_upper_m[d], iupper_pm[d] + p_ghost_num);
+                        ic_trimmed_lower_m[d] = std::max(ic_lower_m[d], ilower[d] - p_gcw[d]);
+                        ic_trimmed_upper_m[d] = std::min(ic_upper_m[d], iupper[d] + p_gcw[d]);
 
                     }
 
@@ -2024,8 +2033,8 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
-                    P_i_qp[local_indices[k]] = Q_data_axis[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
-                    P_o_qp[local_indices[k]] = Q_data_axis[local_indices[k]] + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
+					P_i_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]]; //Q_data_axis_m[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
+                    P_o_qp[local_indices[k]] = P_j_qp[local_indices[k]] +  P_i_qp[local_indices[k]]; //Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
                 }
                 //~ }
             }
@@ -5726,6 +5735,13 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
                                 const std::vector<Pointer<RefineSchedule<NDIM> > >& u_ghost_fill_scheds,
                                 const double data_time)
 {
+	
+	
+	
+	
+
+	
+	
     for (unsigned int part = 0; part < d_num_parts; ++part)
     {
 		
@@ -5804,6 +5820,29 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 		const std::vector<std::vector<double> >& phi_X = X_fe->get_phi();
 		const std::vector<std::vector<double> >& X_dphi_dxi = X_fe->get_dphidxi();
         const std::vector<std::vector<double> >& X_dphi_deta = X_fe->get_dphideta();
+        
+        
+        
+        
+        
+        
+        /*
+        const int coarsest_ln = 0;
+		const int finest_ln = d_hierarchy->getFinestLevelNumber();														
+		for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
+		{
+			const Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);													
+			if (!level->checkAllocated(side_mask_scratch_idx)) level->allocatePatchData(side_mask_scratch_idx);
+		}
+
+		HierarchySideDataOpsReal<NDIM, double> hier_sc_data_ops(d_hierarchy, coarsest_ln, finest_ln);       
+		hier_sc_data_ops.copyData(side_mask_scratch_idx, u_data_idx, /interior only/ false);
+	 
+		*/
+
+		//~ RefineAlgorithm<NDIM> ghost_fill_alg;
+		//~ ghost_fill_alg.registerRefine(side_mask_scratch_idx, side_mask_scratch_idx, side_mask_scratch_idx, NULL);
+          
 		
 		for (unsigned int k = 0; k < u_ghost_fill_scheds.size(); ++k)
 		{
@@ -5916,6 +5955,14 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 		const Pointer<CartesianGridGeometry<NDIM> > grid_geom = level->getGridGeometry();
 		//const IntVector<NDIM>& periodic_shift = grid_geom->getPeriodicShift();
 		VectorValue<double> tau1, tau2, n;
+		
+		
+		
+		
+		
+
+		
+		
         
         int local_patch_num = 0;
 		for (PatchLevel<NDIM>::Iterator p(level); p; p++, ++local_patch_num)
@@ -5935,18 +5982,25 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 			
 			const double* const dx = pgeom->getDx();
 			
-			const int u_ghost_num = 2;
+			
 			
 			boost::array<double, NDIM> x_lower_gh, x_upper_gh;
 			double diag_dis = 0.0;
             for (unsigned int d = 0; d < NDIM; ++d)
             {
                 diag_dis += dx[d] * dx[d];
-				x_lower_gh[d] = x_lower[d] - 2.0 * dx[d];
-				x_upper_gh[d] = x_upper[d] + 2.0 * dx[d];
-            }
+			}
+			
+			const double dh = d_vel_interp_width * sqrt(diag_dis);
             
-            const double dh = d_vel_interp_width * sqrt(diag_dis);
+            const int u_ghost_num = static_cast<double>(ceil(dh/patch_dx_min));
+            
+            
+            for (unsigned int d = 0; d < NDIM; ++d)
+            {
+				x_lower_gh[d] = x_lower[d] - (static_cast<double>(u_ghost_num)) * dx[d];
+				x_upper_gh[d] = x_upper[d] + (static_cast<double>(u_ghost_num)) * dx[d];
+            }
             
             double* x_upper_ghost = &x_upper_gh[0];
             double* x_lower_ghost = &x_lower_gh[0];
@@ -6124,6 +6178,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 
 				const double* const XM = &X_qp_m[NDIM * k];
 				const Index<NDIM> im = IndexUtilities::getCellIndex(XM, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());  
+				
 				if (!ghost_box.contains(im) && patch_box.contains(i)) 
 					TBOX_ERROR(d_object_name
                        << "::IBFEMethod():\n"
@@ -6783,26 +6838,8 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 	 VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
 	 
 	  const int p_data_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getPressureVariable(),
-                                                           getINSHierarchyIntegrator()->getCurrentContext());
-                                                           
-	   Pointer<CellVariable<NDIM, double> > p_interp_var = new CellVariable<NDIM, double>("p_interp_var", /*depth*/ 2);
-	
-	
-	
-	//~ const IntVector<NDIM> ghosts = 3;
-    //~ Pointer<CellVariable<NDIM, double> > p_var = new CellVariable<NDIM, double>(d_object_name + "::p_interp");
-    //~ registerVariable(p_interp_current_idx,
-                     //~ p_interp_new_idx,
-                     //~ p_interp_scratch_idx,
-                     //~ p_interp_var,
-                     //~ ghosts,
-                     //~ "CONSERVATIVE_COARSEN",
-                     //~ "CONSERVATIVE_LINEAR_REFINE");
-	 
-	 //~ int p_interp_scratch_idx = var_db->registerVariableAndContext(p_interp_var,
-															//~ var_db->getContext(d_object_name + "::CONTEXT"),
-															//~ /*ghost cell width*/ hier::IntVector<NDIM>(2));
-			
+                                                           getINSHierarchyIntegrator()->getScratchContext());
+                                                  
 			
 	const int coarsest_ln = 0;
     const int finest_ln = d_hierarchy->getFinestLevelNumber();														
@@ -6811,32 +6848,13 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 			const Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);													
 			if (!level->checkAllocated(mask_scratch_idx)) level->allocatePatchData(mask_scratch_idx);
 	}
-	  //~ const int P_scratch_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getPressureVariable(),
-                                                           //~ getINSHierarchyIntegrator()->getScratchContext());
+
 	HierarchyCellDataOpsReal<NDIM, double> hier_cc_data_ops(d_hierarchy, coarsest_ln, finest_ln);       
 	hier_cc_data_ops.copyData(mask_scratch_idx, p_data_idx, /*interior only*/ false);
 	 
-	//~ tbox::Pointer<hier::VariableContext> scratch_ctx = var_db->getContext("INSStaggeredHierarchyIntegrator::SCRATCH");
-	
-	
-	  //~ tbox::Pointer<pdat::CellVariable<NDIM, double> > P_var =
-            //~ new pdat::CellVariable<NDIM, double>("INSStaggeredHierarchyIntegrator::P");
-
-        //~ const int P_scratch_idx = var_db->registerVariableAndContext(P_var, scratch_ctx, 2);
         
        for (unsigned int part = 0; part < d_num_parts; ++part)
 		{
-			//~ Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(d_fe_data_managers[part]->getLevelNumber());
-			//~ int local_patch_num = 0;
-			//~ for (PatchLevel<NDIM>::Iterator p(level); p; p++, ++local_patch_num)
-			//~ {
-			   //~ level->allocatePatchData(P_scratch_idx, data_time);
-			//~ }
-	 
-	 
-	 
-    //~ const int p_data_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getPressureVariable(),
-                                                           //~ getINSHierarchyIntegrator()->getCurrentContext());
                                                            
 
 			const int finest_ln = d_hierarchy->getFinestLevelNumber();
@@ -6844,8 +6862,6 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 			ghost_fill_alg.registerRefine(mask_scratch_idx, mask_scratch_idx, mask_scratch_idx, NULL);
 			Pointer<RefineSchedule<NDIM> > ghost_fill_schd =
 					ghost_fill_alg.createSchedule(d_hierarchy->getPatchLevel(finest_ln));
-					
-				//	p_ghost_fill_schd = p_ghost_fill_alg.createSchedule(patch_hierarchy->getPatchLevel(finest_ln));
 
 			ghost_fill_schd->fillData(data_time);
 			
@@ -7797,38 +7813,6 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 //~
 //~ } // interpolateVelocityWithJump
 
-//~ void
-//~ IBFEMethod::interpolateVelocity(const int u_data_idx,
-//~ const std::vector<Pointer<CoarsenSchedule<NDIM> > >& /*u_synch_scheds*/,
-//~ const std::vector<Pointer<RefineSchedule<NDIM> > >& u_ghost_fill_scheds,
-//~ const double data_time)
-//~ {
-//~ for (unsigned int part = 0; part < d_num_parts; ++part)
-//~ {
-//~ NumericVector<double>* X_vec = NULL;
-//~ NumericVector<double>* X_ghost_vec = d_X_IB_ghost_vecs[part];
-//~ NumericVector<double>* U_vec = NULL;
-//~ if (MathUtilities<double>::equalEps(data_time, d_current_time))
-//~ {
-//~ X_vec = d_X_current_vecs[part];
-//~ U_vec = d_U_current_vecs[part];
-//~ }
-//~ else if (MathUtilities<double>::equalEps(data_time, d_half_time))
-//~ {
-//~ X_vec = d_X_half_vecs[part];
-//~ U_vec = d_U_half_vecs[part];
-//~ }
-//~ else if (MathUtilities<double>::equalEps(data_time, d_new_time))
-//~ {
-//~ X_vec = d_X_new_vecs[part];
-//~ U_vec = d_U_new_vecs[part];
-//~ }
-//~ X_vec->localize(*X_ghost_vec);
-//~ d_fe_data_managers[part]->interp(
-//~ u_data_idx, *U_vec, *X_ghost_vec, VELOCITY_SYSTEM_NAME, u_ghost_fill_scheds, data_time);
-//~ }
-//~ return;
-//~ } // interpolateVelocity
 
 void
 IBFEMethod::forwardEulerStep(const double current_time, const double new_time)
@@ -8550,7 +8534,7 @@ IBFEMethod::initializeFEData()
 void
 IBFEMethod::registerEulerianVariables()
 {
-    const IntVector<NDIM> ghosts = 2;
+    const IntVector<NDIM> ghosts = 6;
     mask_var = new CellVariable<NDIM, double>(d_object_name + "::mask");
     registerVariable(mask_current_idx,
                      mask_new_idx,
@@ -8560,8 +8544,24 @@ IBFEMethod::registerEulerianVariables()
                      "CONSERVATIVE_COARSEN",
                      "CONSERVATIVE_LINEAR_REFINE");
     return;
-} // registerEulerianVariables
+} // registerEulerianCellVariables
 
+/*
+void
+IBFEMethod::registerEulerianSideVariables()
+{
+    const IntVector<NDIM> side_ghosts = 6;
+    side_mask_var = new SideVariable<NDIM, double>(d_object_name + "::sidemask");
+    registerVariable(side_mask_current_idx,
+                     side_mask_new_idx,
+                     side_mask_scratch_idx,
+                     side_mask_var,
+                     side_ghosts,
+                     "CONSERVATIVE_COARSEN",
+                     "CONSERVATIVE_LINEAR_REFINE");
+    return;
+} // registerEulerianCellVariables
+*/
 
 void
 IBFEMethod::initializePatchHierarchy(Pointer<PatchHierarchy<NDIM> > hierarchy,
@@ -8703,6 +8703,7 @@ IBFEMethod::putToDatabase(Pointer<Database> db)
     db->putBool("d_use_jump_conditions", d_use_jump_conditions);
     db->putBool("d_add_vorticity_term", d_add_vorticity_term);
     db->putDouble("d_vel_interp_width", d_vel_interp_width);
+    db->putDouble("d_p_interp_width", d_p_interp_width);
     db->putBool("d_modify_vel_interp_jumps", d_modify_vel_interp_jumps);
 	db->putBool("d_use_higher_order_jump", d_use_higher_order_jump);
     //db->putString("d_fe_family", Utility::enum_to_string<FEFamily>(d_fe_family));
@@ -13209,6 +13210,7 @@ IBFEMethod::commonConstructor(const std::string& object_name,
     d_modify_vel_interp_jumps = false;
     d_use_higher_order_jump = false;
     d_vel_interp_width = 0.0;
+    d_p_interp_width = 0.0;
     d_mu = 0.0;
     d_use_consistent_mass_matrix = true;
     d_do_log = false;
@@ -13371,6 +13373,7 @@ IBFEMethod::getFromInput(Pointer<Database> db, bool /*is_from_restart*/)
     if (db->isBool("use_jump_conditions")) d_use_jump_conditions = db->getBool("use_jump_conditions");
     if (db->isBool("add_vorticity_term")) d_add_vorticity_term = db->getBool("add_vorticity_term");
     if (db->isDouble("vel_interp_width")) d_vel_interp_width = db->getDouble("vel_interp_width");
+    if (db->isDouble("p_interp_width")) d_p_interp_width = db->getDouble("p_interp_width");
     if (db->isBool("modify_vel_interp_jumps")) d_modify_vel_interp_jumps = db->getBool("modify_vel_interp_jumps");
     if (db->isBool("use_higher_order_jump")) d_use_higher_order_jump = db->getBool("use_higher_order_jump");
     if (db->isBool("use_consistent_mass_matrix"))

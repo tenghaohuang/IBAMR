@@ -133,7 +133,9 @@ public:
     static const std::string VELOCITY_SYSTEM_NAME;
 
     SAMRAI::tbox::Pointer<SAMRAI::pdat::CellVariable<NDIM, double> > mask_var;
+   // SAMRAI::tbox::Pointer<SAMRAI::pdat::SideVariable<NDIM, double> > side_mask_var;
     int mask_current_idx, mask_new_idx, mask_scratch_idx;
+  //  int side_mask_current_idx, side_mask_new_idx, side_mask_scratch_idx;
 
     /*!
      * \brief Constructor.
@@ -366,9 +368,15 @@ public:
     void initializeFEData();
 
     /*!
-     * \brief Register Eulerian variables with the parent IBHierarchyIntegrator.
+     * \brief Register Eulerian cell variables with the parent IBHierarchyIntegrator.
      */
     void registerEulerianVariables();
+    
+    //~ /*!
+     //~ * \brief Register Eulerian side variables with the parent IBHierarchyIntegrator.
+     //~ */
+    
+     //~ void registerEulerianSideVariables();
 
     /*!
      * Initialize Lagrangian data corresponding to the given AMR patch hierarchy
@@ -617,6 +625,7 @@ protected:
     bool d_use_higher_order_jump;
     bool d_modify_vel_interp_jumps;
     double d_vel_interp_width;
+    double d_p_interp_width;
     double d_mu;
     std::vector<libMesh::FEFamily> d_fe_family;
     std::vector<libMesh::Order> d_fe_order;
