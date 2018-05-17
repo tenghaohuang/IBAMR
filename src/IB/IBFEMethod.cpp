@@ -1382,6 +1382,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             const size_t num_active_patch_elems = patch_elems.size();
             if (!num_active_patch_elems) continue;
             const Pointer<Patch<NDIM> > patch = level->getPatch(p());
+            const IntVector<NDIM>& ratio = level->getRatio();
             const Pointer<CartesianPatchGeometry<NDIM> > patch_geom = patch->getPatchGeometry();
             const double* const patch_dx = patch_geom->getDx();
             const double patch_dx_min = *std::min_element(patch_dx, patch_dx + NDIM);
@@ -1417,6 +1418,9 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 				x_upper_gh[d] = x_upper[d] + (static_cast<double>(p_ghost_num)) * dx[d];
 				
 			}
+			
+			
+
 
             // Setup vectors to store the values of U and X at the quadrature
             // points.
@@ -1553,7 +1557,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             const IntVector<NDIM>& p_gcw = p_data->getGhostCellWidth();
             
             
-            
+
 			
             const Box<NDIM> ghost_box = Box<NDIM>::grow(patch->getBox(), IntVector<NDIM>(p_ghost_num));
 
@@ -1607,12 +1611,10 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             if (!local_indices.empty())
             {
                 boost::array<int, NDIM> ic_trimmed_lower, ic_trimmed_upper, ic_lower, ic_upper, ic_center;
-                boost::array<int, NDIM> ic_lower_p, ic_upper_p, ic_center_p, ic_lower_m, ic_upper_m, ic_center_m;
-                boost::array<int, NDIM> ic_trimmed_lower_p, ic_trimmed_upper_p, ic_trimmed_lower_m, ic_trimmed_upper_m;
                 boost::array<double, NDIM> X_shifted, X_shifted_p, X_shifted_m, X_cell, X_cell_m, X_cell_p;
-                boost::array<double, 2> w0, w1, wr0, wr1, w0_m, w0_p, w1_m, w1_p;
+                boost::array<double, 2> w0, w1, wr0, wr1;
 #if (NDIM == 3)
-                boost::array<double, 2> w2, wr2, w2_p, w2_m;
+                boost::array<double, 2> w2, wr2;
 #endif
                 boost::array<double, NDIM> x_lower_axis, x_upper_axis, x_lower_axis_pm, x_upper_axis_pm;
                 const int local_sz = (*std::max_element(local_indices.begin(), local_indices.end())) + 1;
@@ -1621,8 +1623,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
                 x_lower_axis[0] = x_lower_axis[1] = 0.0;
                 x_upper_axis[0] = x_upper_axis[1] = 0.0;
-                x_lower_axis_pm[0] = x_lower_axis_pm[1] = 0.0;
-                x_upper_axis_pm[0] = x_upper_axis_pm[1] = 0.0;
+
 
 #if (NDIM == 3)
                 x_lower_axis[2] = x_upper_axis[2] = 0.0;
@@ -1639,8 +1640,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                     x_lower_axis[d] = x_lower[d];
                     x_upper_axis[d] = x_upper[d];
                     
-                    x_lower_axis_pm[d] = x_lower[d] - static_cast<double>(p_ghost_num) * dx[d];
-                    x_upper_axis_pm[d] = x_upper[d] + static_cast<double>(p_ghost_num) * dx[d];
                 }
                 //~ x_lower_axis[axis] -= 0.5*dx[axis];
                 //~ x_upper_axis[axis] += 0.5*dx[axis];
@@ -1652,12 +1651,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
                 const IntVector<NDIM>& ilower = interp_box.lower();
                 const IntVector<NDIM>& iupper = interp_box.upper();
-                
-                const IntVector<NDIM>& ilower_pm = ghost_box.lower();
-                const IntVector<NDIM>& iupper_pm = ghost_box.upper();
-                
-                
-          
 
                 boost::const_multi_array_ref<double, NDIM + 1> p_data_array(
                     p_data->getPointer(),
@@ -1681,8 +1674,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                     for (int d = 0; d < NDIM; ++d)
                     {
                         X_shifted[d] = X_qp[d + s * NDIM] + periodic_shifts[d + k * NDIM];
-                        X_shifted_p[d] = X_qp_p[d + s * NDIM] + periodic_shifts[d + k * NDIM];
-                        X_shifted_m[d] = X_qp_m[d + s * NDIM] + periodic_shifts[d + k * NDIM];
 
                     }
 
@@ -1706,37 +1697,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                         ic_trimmed_lower[d] = std::max(ic_lower[d], ilower[d] - p_gcw[d]);
                         ic_trimmed_upper[d] = std::min(ic_upper[d], iupper[d] + p_gcw[d]);
 
-                        ic_center_p[d] = ilower_pm[d] + NINT((X_shifted_p[d] - x_lower_axis_pm[d]) / dx[d] - 0.5 );
-                        X_cell_p[d] = x_lower_axis_pm[d] + (static_cast<double>(ic_center_p[d] - ilower_pm[d]) + 0.5) * dx[d];
-
-                        if (X_shifted_p[d] <= X_cell_p[d])
-                        {
-                            ic_lower_p[d] = ic_center_p[d] - 1;
-                            ic_upper_p[d] = ic_center_p[d];
-                        }
-                        else
-                        {
-                            ic_lower_p[d] = ic_center_p[d];
-                            ic_upper_p[d] = ic_center_p[d] + 1;
-                        }
-                        ic_trimmed_lower_p[d] = std::max(ic_lower_p[d], ilower[d] - p_gcw[d]);
-                        ic_trimmed_upper_p[d] = std::min(ic_upper_p[d], iupper[d] + p_gcw[d]);
-
-                        ic_center_m[d] = ilower_pm[d] + NINT((X_shifted_m[d] - x_lower_axis_pm[d]) / dx[d] - 0.5 );
-                        X_cell_m[d] = x_lower_axis_pm[d] + (static_cast<double>(ic_center_m[d] - ilower_pm[d]) + 0.5) * dx[d];
-
-                        if (X_shifted_m[d] <= X_cell_m[d])
-                        {
-                            ic_lower_m[d] = ic_center_m[d] - 1;
-                            ic_upper_m[d] = ic_center_m[d];
-                        }
-                        else
-                        {
-                            ic_lower_m[d] = ic_center_m[d];
-                            ic_upper_m[d] = ic_center_m[d] + 1;
-                        }
-                        ic_trimmed_lower_m[d] = std::max(ic_lower_m[d], ilower[d] - p_gcw[d]);
-                        ic_trimmed_upper_m[d] = std::min(ic_upper_m[d], iupper[d] + p_gcw[d]);
 
                     }
 
@@ -1790,74 +1750,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 									}
 #endif
 
-                    if (X_shifted_p[0] <= X_cell_p[0])
-                    {
-                        w0_p[0] = (X_cell_p[0] - X_shifted_p[0]) / dx[0];
-                        w0_p[1] = 1.0 - w0_p[0];
-                    }
-                    else
-                    {
-                        w0_p[0] = 1.0 + (X_cell_p[0] - X_shifted_p[0]) / dx[0];
-                        w0_p[1] = 1.0 - w0_p[0];
-                    }
-
-                    if (X_shifted_m[0] <= X_cell_m[0])
-                    {
-                        w0_m[0] = (X_cell_m[0] - X_shifted_m[0]) / dx[0];
-                        w0_m[1] = 1.0 - w0_m[0];
-                    }
-                    else
-                    {
-                        w0_m[0] = 1.0 + (X_cell_m[0] - X_shifted_m[0]) / dx[0];
-                        w0_m[1] = 1.0 - w0_m[0];
-                    }
-
-                    if (X_shifted_p[1] <= X_cell_p[1])
-                    {
-                        w1_p[0] = (X_cell_p[1] - X_shifted_p[1]) / dx[1];
-                        w1_p[1] = 1.0 - w1_p[0];
-                    }
-                    else
-                    {
-                        w1_p[0] = 1.0 + (X_cell_p[1] - X_shifted_p[1]) / dx[1];
-                        w1_p[1] = 1.0 - w1_p[0];
-                    }
-
-                    if (X_shifted_m[1] <= X_cell_m[1])
-                    {
-                        w1_m[0] = (X_cell_m[1] - X_shifted_m[1]) / dx[1];
-                        w1_m[1] = 1.0 - w1_m[0];
-                    }
-                    else
-                    {
-                        w1_m[0] = 1.0 + (X_cell_m[1] - X_shifted_m[1]) / dx[1];
-                        w1_m[1] = 1.0 - w1_m[0];
-                    }
-#if (NDIM == 3)
-
-                    if (X_shifted_p[2] <= X_cell_p[2])
-                    {
-                        w2_p[0] = (X_cell_p[2] - X_shifted_p[2]) / dx[2];
-                        w2_p[1] = 1.0 - w2_p[0];
-                    }
-                    else
-                    {
-                        w2_p[0] = 1.0 + (X_cell_p[2] - X_shifted_p[2]) / dx[2];
-                        w2_p[1] = 1.0 - w2_p[0];
-                    }
-
-                    if (X_shifted_m[2] <= X_cell_m[2])
-                    {
-                        w2_m[0] = (X_cell_m[2] - X_shifted_m[2]) / dx[2];
-                        w2_m[1] = 1.0 - w2_m[0];
-                    }
-                    else
-                    {
-                        w2_m[0] = 1.0 + (X_cell_m[2] - X_shifted_m[2]) / dx[2];
-                        w2_m[1] = 1.0 - w2_m[0];
-                    }
-
-#endif
 
 
 
@@ -1911,57 +1803,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 for (int d = 0; d < p_depth; ++d)
                 {
                     Q_data_axis[s] = 0.0;
-                    Q_data_axis_p[s] = 0.0;
-                    Q_data_axis_m[s] = 0.0;
-#if (NDIM == 2)
-
-                    for (int ic1 = ic_trimmed_lower_p[1]; ic1 <= ic_trimmed_upper_p[1]; ++ic1)
-                    {
-                        for (int ic0 = ic_trimmed_lower_p[0]; ic0 <= ic_trimmed_upper_p[0]; ++ic0)
-                        {
-                            Q_data_axis_p[s] +=
-                                w0_p[ic0 - ic_lower_p[0]] * w1_p[ic1 - ic_lower_p[1]] * p_data_array[ic0][ic1][d];
-                        }
-                    }
-
-                    for (int ic1 = ic_trimmed_lower_m[1]; ic1 <= ic_trimmed_upper_m[1]; ++ic1)
-                    {
-                        for (int ic0 = ic_trimmed_lower_m[0]; ic0 <= ic_trimmed_upper_m[0]; ++ic0)
-                        {
-                            Q_data_axis_m[s] +=
-                                w0_m[ic0 - ic_lower_m[0]] * w1_m[ic1 - ic_lower_m[1]] * p_data_array[ic0][ic1][d];
-                        }
-                    }
-#endif
-#if (NDIM == 3)
-
-                    for (int ic2 = ic_trimmed_lower_p[2]; ic2 <= ic_trimmed_upper_p[2]; ++ic2)
-                    {
-                        for (int ic1 = ic_trimmed_lower_p[1]; ic1 <= ic_trimmed_upper_p[1]; ++ic1)
-                        {
-                            for (int ic0 = ic_trimmed_lower_p[0]; ic0 <= ic_trimmed_upper_p[0]; ++ic0)
-                            {
-                                Q_data_axis_p[s] += w0_p[ic0 - ic_lower_p[0]] * w1_p[ic1 - ic_lower_p[1]] *
-                                                    w2_p[ic2 - ic_lower_p[2]] * p_data_array[ic0][ic1][ic2][d];
-                            }
-                        }
-                    }
-
-                    for (int ic2 = ic_trimmed_lower_m[2]; ic2 <= ic_trimmed_upper_m[2]; ++ic2)
-                    {
-                        for (int ic1 = ic_trimmed_lower_m[1]; ic1 <= ic_trimmed_upper_m[1]; ++ic1)
-                        {
-                            for (int ic0 = ic_trimmed_lower_m[0]; ic0 <= ic_trimmed_upper_m[0]; ++ic0)
-                            {
-                                Q_data_axis_m[s] += w0_m[ic0 - ic_lower_m[0]] * w1_m[ic1 - ic_lower_m[1]] *
-                                                    w2_m[ic2 - ic_lower_m[2]] * p_data_array[ic0][ic1][ic2][d];
-                            }
-                        }
-                    }
-
-#endif
-
-
 
 
 #if (NDIM == 2)
@@ -2030,11 +1871,21 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
                      } //depth
                 } //local indicies
+                
+                
 
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
-					P_i_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]]; //Q_data_axis_m[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
-                    P_o_qp[local_indices[k]] = P_j_qp[local_indices[k]] +  P_i_qp[local_indices[k]]; //Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
+					const double* const XMM = &X_qp_m[NDIM * k];
+					const Index<NDIM> imm = IndexUtilities::getCellIndex(XMM, grid_geom, ratio);
+					// x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());
+					
+					const double* const XPP = &X_qp_p[NDIM * k];
+					const Index<NDIM> ipp = IndexUtilities::getCellIndex(XPP, grid_geom, ratio);
+					// x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());
+					
+					P_i_qp[local_indices[k]] = Q_data_axis[local_indices[k]]; // (*p_data)(imm); //X_qp_m[d + k * NDIM] //Q_data_axis_m[local_indices[k]]; //Q_data_axis_m[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
+                    P_o_qp[local_indices[k]] =  (*p_data)(ipp);  //P_j_qp[local_indices[k]];// + P_i_qp[local_indices[k]] ; //(*p_data)(ipp);  //(P_j_qp[local_indices[k]] +  P_i_qp[local_indices[k]]); //Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
                 }
                 //~ }
             }
