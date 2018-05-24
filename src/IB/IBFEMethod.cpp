@@ -386,6 +386,7 @@ IBFEMethod::setupTagBuffer(Array<int>& tag_buffer, Pointer<GriddingAlgorithm<NDI
     return;
 } // setupTagBuffer
     
+
  // This function calculates the pressure(P- and P+) on the interface using extrapolation in the normal direction
  
 
@@ -510,7 +511,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             const size_t num_active_patch_elems = patch_elems.size();
             if (!num_active_patch_elems) continue;
             const Pointer<Patch<NDIM> > patch = level->getPatch(p());
-            const IntVector<NDIM>& ratio = level->getRatio();
             const Pointer<CartesianPatchGeometry<NDIM> > patch_geom = patch->getPatchGeometry();
             const double* const patch_dx = patch_geom->getDx();
             const double patch_dx_min = *std::min_element(patch_dx, patch_dx + NDIM);
@@ -536,8 +536,7 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             }
             const double dh = d_p_interp_width * sqrt(diag_dis);
             
-            double* x_upper_ghost = &x_upper_gh[0];
-            double* x_lower_ghost = &x_lower_gh[0];
+
             const int p_ghost_num = static_cast<int>(ceil(dh/patch_dx_min));
             
             for (unsigned int d = 0; d < NDIM; ++d)
@@ -547,8 +546,8 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 				
 			}
 			
-			
-
+			double* x_upper_ghost = &x_upper_gh[0];
+            double* x_lower_ghost = &x_lower_gh[0];
 
             // Setup vectors to store the values of U and X at the quadrature
             // points.
@@ -610,8 +609,9 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                     // element type and quadrature rule, not on the element
                     // geometry.
                     X_fe->attach_quadrature_rule(qrule.get());
-                    X_fe->reinit(elem);
                 }
+                X_fe->reinit(elem);
+                
                 const unsigned int n_node = elem->n_nodes();
                 const unsigned int n_qp = qrule->n_points();
 
@@ -677,18 +677,13 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
 
             Pointer<CellData<NDIM, double> > p_data = patch->getPatchData(p_data_idx);
-
             const IntVector<NDIM>& p_gcw = p_data->getGhostCellWidth();
-            
-           
 			
             const Box<NDIM> ghost_box = Box<NDIM>::grow(patch->getBox(), IntVector<NDIM>(p_ghost_num));
 
            const int p_depth = p_data->getDepth();
-           
-  
-  
-            LEInteractor::interpolate(P_i_qp, 1, X_qp_m, NDIM, p_data, patch, ghost_box, "IB_4");
+ 
+       //     LEInteractor::interpolate(P_i_qp, 1, X_qp_m, NDIM, p_data, patch, ghost_box, "IB_4");
 
            
             std::vector<int> local_indices;
@@ -728,16 +723,19 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             std::vector<double> periodic_shifts(NDIM * local_indices.size());
 
             const unsigned int nindices = static_cast<int>(local_indices.size());
+            
 
             typedef boost::multi_array_types::extent_range range;
 
             if (!local_indices.empty())
             {
                 boost::array<int, NDIM> ic_trimmed_lower, ic_trimmed_upper, ic_lower, ic_upper, ic_center;
+                boost::array<int, NDIM> ic_lower_p, ic_upper_p, ic_center_p, ic_lower_m, ic_upper_m, ic_center_m;
+                boost::array<int, NDIM> ic_trimmed_lower_p, ic_trimmed_upper_p, ic_trimmed_lower_m, ic_trimmed_upper_m;
                 boost::array<double, NDIM> X_shifted, X_shifted_p, X_shifted_m, X_cell, X_cell_m, X_cell_p;
-                boost::array<double, 2> w0, w1, wr0, wr1;
+                boost::array<double, 2> w0, w1, wr0, wr1, w0_m, w0_p, w1_m, w1_p;
 #if (NDIM == 3)
-                boost::array<double, 2> w2, wr2;
+                boost::array<double, 2> w2, wr2, w2_p, w2_m;
 #endif
                 boost::array<double, NDIM> x_lower_axis, x_upper_axis, x_lower_axis_pm, x_upper_axis_pm;
                 const int local_sz = (*std::max_element(local_indices.begin(), local_indices.end())) + 1;
@@ -746,34 +744,33 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
                 x_lower_axis[0] = x_lower_axis[1] = 0.0;
                 x_upper_axis[0] = x_upper_axis[1] = 0.0;
-
+                x_lower_axis_pm[0] = x_lower_axis_pm[1] = 0.0;
+                x_upper_axis_pm[0] = x_upper_axis_pm[1] = 0.0;
 
 #if (NDIM == 3)
                 x_lower_axis[2] = x_upper_axis[2] = 0.0;
                 x_lower_axis_pm[2] = x_upper_axis_pm[2] = 0.0;
 #endif
 
-                //Box<NDIM> side_boxes[NDIM];
-
-                //~ for (unsigned int axis = 0; axis < NDIM; ++axis)
-                //~ {
 
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
                     x_lower_axis[d] = x_lower[d];
                     x_upper_axis[d] = x_upper[d];
                     
+                    x_lower_axis_pm[d] = x_lower[d] - static_cast<double>(p_ghost_num) * dx[d];
+                    x_upper_axis_pm[d] = x_upper[d] + static_cast<double>(p_ghost_num) * dx[d];
                 }
-                //~ x_lower_axis[axis] -= 0.5*dx[axis];
-                //~ x_upper_axis[axis] += 0.5*dx[axis];
 
-                //~ for (int d = 0; d < NDIM; ++d)
-                //~ {
-                //~ side_boxes[d] = SideGeometry<NDIM>::toSideBox(interp_box, d);
-                //~ }
 
                 const IntVector<NDIM>& ilower = interp_box.lower();
                 const IntVector<NDIM>& iupper = interp_box.upper();
+                
+                const IntVector<NDIM>& ilower_pm = ghost_box.lower();
+                const IntVector<NDIM>& iupper_pm = ghost_box.upper();
+                
+                
+          
 
                 boost::const_multi_array_ref<double, NDIM + 1> p_data_array(
                     p_data->getPointer(),
@@ -797,6 +794,8 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                     for (int d = 0; d < NDIM; ++d)
                     {
                         X_shifted[d] = X_qp[d + s * NDIM] + periodic_shifts[d + k * NDIM];
+                        X_shifted_p[d] = X_qp_p[d + s * NDIM] + periodic_shifts[d + k * NDIM];
+                        X_shifted_m[d] = X_qp_m[d + s * NDIM] + periodic_shifts[d + k * NDIM];
 
                     }
 
@@ -820,59 +819,111 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                         ic_trimmed_lower[d] = std::max(ic_lower[d], ilower[d] - p_gcw[d]);
                         ic_trimmed_upper[d] = std::min(ic_upper[d], iupper[d] + p_gcw[d]);
 
+                        ic_center_p[d] = ilower_pm[d] + NINT((X_shifted_p[d] - x_lower_axis_pm[d]) / dx[d] - 0.5 );
+                        X_cell_p[d] = x_lower_axis_pm[d] + (static_cast<double>(ic_center_p[d] - ilower_pm[d]) + 0.5) * dx[d];
+
+                        if (X_shifted_p[d] <= X_cell_p[d])
+                        {
+                            ic_lower_p[d] = ic_center_p[d] - 1;
+                            ic_upper_p[d] = ic_center_p[d];
+                        }
+                        else
+                        {
+                            ic_lower_p[d] = ic_center_p[d];
+                            ic_upper_p[d] = ic_center_p[d] + 1;
+                        }
+                        ic_trimmed_lower_p[d] = std::max(ic_lower_p[d], ilower[d] - p_gcw[d]);
+                        ic_trimmed_upper_p[d] = std::min(ic_upper_p[d], iupper[d] + p_gcw[d]);
+
+                        ic_center_m[d] = ilower_pm[d] + NINT((X_shifted_m[d] - x_lower_axis_pm[d]) / dx[d] - 0.5 );
+                        X_cell_m[d] = x_lower_axis_pm[d] + (static_cast<double>(ic_center_m[d] - ilower_pm[d]) + 0.5) * dx[d];
+
+                        if (X_shifted_m[d] <= X_cell_m[d])
+                        {
+                            ic_lower_m[d] = ic_center_m[d] - 1;
+                            ic_upper_m[d] = ic_center_m[d];
+                        }
+                        else
+                        {
+                            ic_lower_m[d] = ic_center_m[d];
+                            ic_upper_m[d] = ic_center_m[d] + 1;
+                        }
+                        ic_trimmed_lower_m[d] = std::max(ic_lower_m[d], ilower[d] - p_gcw[d]);
+                        ic_trimmed_upper_m[d] = std::min(ic_upper_m[d], iupper[d] + p_gcw[d]);
 
                     }
 
                                      if (X_shifted[0] <= X_cell[0])
-                                                                        {
 									   w0[0] = (X_cell[0]-X_shifted[0])/dx[0];
-									   wr0[0] = w0[0]; 
-									   w0[1] = 1.0 - w0[0];
-									   wr0[1] = -w0[1];
-									}
 									else
-									{
 									   w0[0] = 1.0 + (X_cell[0]-X_shifted[0])/dx[0];
-									   wr0[0] = w0[0];
-									   w0[1] = 1.0 - w0[0]; 
-									   wr0[1] = -w0[1];
-									}
+									wr0[0] = w0[0];
+									w0[1] = 1.0 - w0[0]; 
+									wr0[1] = -w0[1];
+
 									
 									
 									if ( X_shifted[1] <= X_cell[1] )
-									{
 									   w1[0] = (X_cell[1]-X_shifted[1])/dx[1];
-									   wr1[0] = w1[0];
-									   w1[1] = 1.0 - w1[0];
-									   wr1[1] = -w1[1];
-									}
 									else
-									{
 									   w1[0] = 1.0 + (X_cell[1]-X_shifted[1])/dx[1];
-									   wr1[0] = w1[0];
-									   w1[1] = 1.0 - w1[0];
-									   wr1[1] = - w1[1];
-									}
+									wr1[0] = w1[0];
+									w1[1] = 1.0 - w1[0];
+									wr1[1] = - w1[1];
                     
                     
                     
 #if (NDIM == 3)
 									if ( X_shifted[2] <= X_cell[2] )
-									{
 									   w2[0] = (X_cell[2]-X_shifted[2])/dx[2];
-									   wr2[0] = w2[0];
-									   w2[1] = 1.0 - w2[0];
-									   wr2[1] = -w2[1];
-									}
 									else
-									{
 									   w2[0] = 1.0 + (X_cell[2]-X_shifted[2])/dx[2];
-									   wr2[0] = w2[0];
-									   w2[1] = 1.0 - w2[0];
-									   wr2[1] = - w2[1];
-									}
+									wr2[0] = w2[0];
+									w2[1] = 1.0 - w2[0];
+									wr2[1] = - w2[1];
+								
 #endif
 
+                    if (X_shifted_p[0] <= X_cell_p[0])
+                        w0_p[0] = (X_cell_p[0] - X_shifted_p[0]) / dx[0];
+                    else
+                        w0_p[0] = 1.0 + (X_cell_p[0] - X_shifted_p[0]) / dx[0];
+                     w0_p[1] = 1.0 - w0_p[0];
+
+                    if (X_shifted_m[0] <= X_cell_m[0])
+                        w0_m[0] = (X_cell_m[0] - X_shifted_m[0]) / dx[0];
+                    else
+                        w0_m[0] = 1.0 + (X_cell_m[0] - X_shifted_m[0]) / dx[0];
+                    w0_m[1] = 1.0 - w0_m[0];
+
+
+                    if (X_shifted_p[1] <= X_cell_p[1])
+                        w1_p[0] = (X_cell_p[1] - X_shifted_p[1]) / dx[1];
+                    else
+                        w1_p[0] = 1.0 + (X_cell_p[1] - X_shifted_p[1]) / dx[1];
+                    w1_p[1] = 1.0 - w1_p[0];
+
+
+                    if (X_shifted_m[1] <= X_cell_m[1])
+                        w1_m[0] = (X_cell_m[1] - X_shifted_m[1]) / dx[1];
+                    else
+                        w1_m[0] = 1.0 + (X_cell_m[1] - X_shifted_m[1]) / dx[1];
+                    w1_m[1] = 1.0 - w1_m[0];
+#if (NDIM == 3)
+
+                    if (X_shifted_p[2] <= X_cell_p[2])
+                        w2_p[0] = (X_cell_p[2] - X_shifted_p[2]) / dx[2];
+                    else
+                        w2_p[0] = 1.0 + (X_cell_p[2] - X_shifted_p[2]) / dx[2];
+                    w2_p[1] = 1.0 - w2_p[0];
+
+                    if (X_shifted_m[2] <= X_cell_m[2])
+                        w2_m[0] = (X_cell_m[2] - X_shifted_m[2]) / dx[2];
+                    else
+                        w2_m[0] = 1.0 + (X_cell_m[2] - X_shifted_m[2]) / dx[2];
+                    w2_m[1] = 1.0 - w2_m[0];
+
+#endif
 
 
 
@@ -926,6 +977,57 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 for (int d = 0; d < p_depth; ++d)
                 {
                     Q_data_axis[s] = 0.0;
+                    Q_data_axis_p[s] = 0.0;
+                    Q_data_axis_m[s] = 0.0;
+#if (NDIM == 2)
+
+                    for (int ic1 = ic_trimmed_lower_p[1]; ic1 <= ic_trimmed_upper_p[1]; ++ic1)
+                    {
+                        for (int ic0 = ic_trimmed_lower_p[0]; ic0 <= ic_trimmed_upper_p[0]; ++ic0)
+                        {
+                            Q_data_axis_p[s] +=
+                                w0_p[ic0 - ic_lower_p[0]] * w1_p[ic1 - ic_lower_p[1]] * p_data_array[ic0][ic1][d];
+                        }
+                    }
+
+                    for (int ic1 = ic_trimmed_lower_m[1]; ic1 <= ic_trimmed_upper_m[1]; ++ic1)
+                    {
+                        for (int ic0 = ic_trimmed_lower_m[0]; ic0 <= ic_trimmed_upper_m[0]; ++ic0)
+                        {
+                            Q_data_axis_m[s] +=
+                                w0_m[ic0 - ic_lower_m[0]] * w1_m[ic1 - ic_lower_m[1]] * p_data_array[ic0][ic1][d];
+                        }
+                    }
+#endif
+#if (NDIM == 3)
+
+                    for (int ic2 = ic_trimmed_lower_p[2]; ic2 <= ic_trimmed_upper_p[2]; ++ic2)
+                    {
+                        for (int ic1 = ic_trimmed_lower_p[1]; ic1 <= ic_trimmed_upper_p[1]; ++ic1)
+                        {
+                            for (int ic0 = ic_trimmed_lower_p[0]; ic0 <= ic_trimmed_upper_p[0]; ++ic0)
+                            {
+                                Q_data_axis_p[s] += w0_p[ic0 - ic_lower_p[0]] * w1_p[ic1 - ic_lower_p[1]] *
+                                                    w2_p[ic2 - ic_lower_p[2]] * p_data_array[ic0][ic1][ic2][d];
+                            }
+                        }
+                    }
+
+                    for (int ic2 = ic_trimmed_lower_m[2]; ic2 <= ic_trimmed_upper_m[2]; ++ic2)
+                    {
+                        for (int ic1 = ic_trimmed_lower_m[1]; ic1 <= ic_trimmed_upper_m[1]; ++ic1)
+                        {
+                            for (int ic0 = ic_trimmed_lower_m[0]; ic0 <= ic_trimmed_upper_m[0]; ++ic0)
+                            {
+                                Q_data_axis_m[s] += w0_m[ic0 - ic_lower_m[0]] * w1_m[ic1 - ic_lower_m[1]] *
+                                                    w2_m[ic2 - ic_lower_m[2]] * p_data_array[ic0][ic1][ic2][d];
+                            }
+                        }
+                    }
+
+#endif
+
+
 
 
 #if (NDIM == 2)
@@ -962,12 +1064,12 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                     {
                         double CC = 0.0;
 
-                        if ((N_qp[s * NDIM] * wr0[ic_upper[0] - ic0] + N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1]) > 0)
+                        if ((N_qp[s * NDIM] * wr0[ic_upper[0] - ic0] + N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1]) < 0)
                         {
-                            CC = pjump[ic0][ic1];
+                            CC =  pjump[ic0][ic1];
                         }
 
-                        Q_data_axis[s] -= CC;
+                        Q_data_axis[s] += CC;
                     }
                 }
 #endif
@@ -982,11 +1084,11 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                             double nproj = N_qp[s * NDIM] * wr0[ic_upper[0] - ic0] +
                                            N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1] +
                                            N_qp[s * NDIM + 2] * wr2[ic_upper[2] - ic2];
-                            if (nproj > 0)
+                            if (nproj < 0)
                             {
-                                CC = pjump[ic0][ic1][ic2];
+                                CC =  pjump[ic0][ic1][ic2];
                             }
-                            Q_data_axis[s] -= CC;
+                            Q_data_axis[s] += CC;
                         }
                     }
                 }
@@ -994,21 +1096,37 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
 
                      } //depth
                 } //local indicies
-                
-                
 
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
-					const double* const XMM = &X_qp_m[NDIM * k];
-					const Index<NDIM> imm = IndexUtilities::getCellIndex(XMM, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());
 					
-					const double* const XPP = &X_qp_p[NDIM * k];
-					const Index<NDIM> ipp = IndexUtilities::getCellIndex(XPP, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());
 					
-				//	pout<< " (*p_data)(ipp) = "<<(*p_data)(ipp)<< " (*p_data)(imm) = "<<(*p_data)(imm)<<"  P_j_qp[local_indices[k]] = "<<P_j_qp[local_indices[k]]<<"\n\n";
+					//~ const double* const XX = &X_qp[NDIM * k];
+					//~ const Index<NDIM> i = IndexUtilities::getCellIndex(XX, patch_geom, interp_box);
+                
+					//~ Index<NDIM> im = i;
+					//~ Index<NDIM> ip = i;
 					
-					P_i_qp[local_indices[k]] = (*p_data)(imm); //Q_data_axis[local_indices[k]]; // (*p_data)(imm); //X_qp_m[d + k * NDIM] //Q_data_axis_m[local_indices[k]]; //Q_data_axis_m[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
-                    P_o_qp[local_indices[k]] = 0.5 * ( (*p_data)(ipp) + P_j_qp[local_indices[k]] - (*p_data)(imm)); // + P_j_qp[local_indices[k]]; //(*p_data)(ipp); //P_j_qp[local_indices[k]]; //(*p_data)(ipp); //(*p_data)(ipp);  //P_j_qp[local_indices[k]];// + P_i_qp[local_indices[k]] ; //(*p_data)(ipp);  //(P_j_qp[local_indices[k]] +  P_i_qp[local_indices[k]]); //Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
+					//~ for (int d = 0; d < NDIM; ++d)
+                    //~ {
+						 //~ ip(d) += 2 * (N_qp[local_indices[k] + d]>0 ? 1 : -1);
+						 //~ im(d) -= 2 * (N_qp[local_indices[k] + d]>0 ? 1 : -1);
+					//~ }
+					
+					//const double* const XMM = &X_qp_m[NDIM * k];
+				//	const Index<NDIM> imm = IndexUtilities::getCellIndex(XMM, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());
+					
+				//	const double* const XPP = &X_qp_p[NDIM * k];
+				//	const Index<NDIM> ipp = IndexUtilities::getCellIndex(XPP, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());
+						
+					//P_i_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
+                  //  P_o_qp[local_indices[k]] = Q_data_axis_p[local_indices[k]]; //0.5 * (Q_data_axis_p[local_indices[k]] + P_j_qp[local_indices[k]] +  P_i_qp[local_indices[k]]); //Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
+					//P_i_qp[local_indices[k]] = (*p_data)(imm); 
+				  //  P_o_qp[local_indices[k]] = (*p_data)(ipp); //0.5 * ( (*p_data)(ipp) + P_j_qp[local_indices[k]] + (*p_data)(imm));
+					
+					
+					P_i_qp[local_indices[k]] = Q_data_axis_m[local_indices[k]]; //Q_data_axis_m[local_indices[k]]; //Q_data_axis[local_indices[k]]; //(2.0 * Q_data_axis_m[local_indices[k]] - Q_data_axis_mm[local_indices[k]]);
+                    P_o_qp[local_indices[k]] = Q_data_axis_p[local_indices[k]]; //0.5 * (Q_data_axis_p[local_indices[k]] + P_j_qp[local_indices[k]] +  P_i_qp[local_indices[k]]); //Q_data_axis_p[local_indices[k]];// + P_j_qp[local_indices[k]]; ////2.0 * Q_data_axis_p[local_indices[k]] - Q_data_axis_pp[local_indices[k]];
                 }
                 //~ }
             }
@@ -1019,15 +1137,6 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
             for (unsigned int e_idx = 0; e_idx < num_active_patch_elems; ++e_idx)
             {
                 Elem* const elem = patch_elems[e_idx];
-                //~ for (unsigned int i = 0; i < n_vars; ++i)
-                //~ {
-                //~ U_dof_map_cache.dof_indices(elem, U_dof_indices[i], i);
-                //~ U_rhs_e[i].resize(static_cast<int>(U_dof_indices[i].size()));
-                //~
-                //~ }
-
-
-
                 P_i_dof_map_cache.dof_indices(elem, P_i_dof_indices);
                 P_i_rhs_e.resize(static_cast<int>(P_i_dof_indices.size()));
 
@@ -1041,19 +1150,9 @@ IBFEMethod::interpolatePressureForTraction(const int p_data_idx, const double da
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
                 const bool qrule_changed = FEDataManager::updateInterpQuadratureRule(
                     qrule, IBFEMethod::getDefaultInterpSpec(), elem, X_node, patch_dx_min);
-                if (qrule_changed)
-                {
-                    // NOTE: Because we are only using the shape function values for
-                    // the FE object associated with X, we only need to reinitialize
-                    // X_fe whenever the quadrature rule changes.  In particular,
-                    // notice that the shape function values depend only on the
-                    // element type and quadrature rule, not on the element
-                    // geometry.
-                    //~ U_fe->attach_quadrature_rule(qrule.get());
-                    X_fe->attach_quadrature_rule(qrule.get());
-                    //~ if (X_fe != U_fe) X_fe->reinit(elem);
-                }
-                //~ U_fe->reinit(elem);
+                if (qrule_changed) X_fe->attach_quadrature_rule(qrule.get());
+
+                X_fe->reinit(elem);
 
                 const unsigned int n_qp = qrule->n_points();
                 const size_t n_basis = X_dof_indices[0].size();
@@ -1448,46 +1547,7 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 {
 	
 
-	 VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
-                                                           
-     const int U_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getVelocityVariable(),
-                                                           getINSHierarchyIntegrator()->getScratchContext());
-
-
-	 
-	  const int p_data_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getPressureVariable(),
-                                                           getINSHierarchyIntegrator()->getScratchContext());
-                                                  
-			
-	const int coarsest_ln = 0;
-    const int finest_ln = d_hierarchy->getFinestLevelNumber();														
-	for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
-    {
-			const Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);													
-			if (!level->checkAllocated(mask_scratch_idx)) level->allocatePatchData(mask_scratch_idx);
-	}
-
-	HierarchyCellDataOpsReal<NDIM, double> hier_cc_data_ops(d_hierarchy, coarsest_ln, finest_ln);       
-	hier_cc_data_ops.copyData(mask_scratch_idx, p_data_idx, /*interior only*/ false);
-	 
-        
-    for (unsigned int part = 0; part < d_num_parts; ++part)
-	{
-                                                           
-
-			const int finest_ln = d_hierarchy->getFinestLevelNumber();
-			RefineAlgorithm<NDIM> ghost_fill_alg;
-			ghost_fill_alg.registerRefine(mask_scratch_idx, mask_scratch_idx, mask_scratch_idx, NULL);
-			Pointer<RefineSchedule<NDIM> > ghost_fill_schd =
-					ghost_fill_alg.createSchedule(d_hierarchy->getPatchLevel(finest_ln));
-
-			ghost_fill_schd->fillData(current_time);
-			
-			
-			interpolatePressureForTraction(mask_scratch_idx, current_time, part);
-	}
-
-
+	//calcHydroF(current_time, U_idx, p_idx);
 	
     for (unsigned part = 0; part < d_num_parts; ++part)
     {
@@ -1512,13 +1572,49 @@ IBFEMethod::postprocessIntegrateData(double current_time, double /*new_time*/, i
 #if (NDIM == 3)
         dw_j_vec->localize(*dw_j_ghost_vec);
 #endif
+
+
+
+
+	 VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
+                                                           
+    const int U_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getVelocityVariable(),
+                                                           getINSHierarchyIntegrator()->getScratchContext());
+                                                                 
+                                                         
+
+	const int coarsest_ln = 0;
+    const int finest_ln = d_hierarchy->getFinestLevelNumber();														
+	for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
+    {
+			const Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);													
+			if (!level->checkAllocated(side_mask_scratch_idx)) level->allocatePatchData(side_mask_scratch_idx);
+	}
+
+	HierarchySideDataOpsReal<NDIM, double> hier_sc_data_ops(d_hierarchy, coarsest_ln, finest_ln);       
+	hier_sc_data_ops.copyData(side_mask_scratch_idx, U_idx, /*interior only*/ false);
+	 
+        
+       for (unsigned int part = 0; part < d_num_parts; ++part)
+		{
+                                                           
+
+			const int finest_ln = d_hierarchy->getFinestLevelNumber();
+			RefineAlgorithm<NDIM> ghost_fill_alg;
+			ghost_fill_alg.registerRefine(side_mask_scratch_idx, side_mask_scratch_idx, side_mask_scratch_idx, NULL);
+			Pointer<RefineSchedule<NDIM> > ghost_fill_schd =
+					ghost_fill_alg.createSchedule(d_hierarchy->getPatchLevel(finest_ln));
+
+			ghost_fill_schd->fillData(d_half_time);
+		
+		}
+
+
+
        if (d_use_jump_conditions)
 			computeFluidTraction(d_half_time,
-                             U_idx,
-                             part);     
-                             
-                             
-         //~ calcHydroF(d_half_time, U_idx, p_data_idx);                               
+                             side_mask_scratch_idx,
+                             part);                
         
         // Reset time-dependent Lagrangian data.
         d_X_new_vecs[part]->close();
@@ -2549,8 +2645,8 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
        // Using the jumps and the force defined as F = [tau]..This calculation should not be used for moving objects!!
        //~ (1.0/dA_da)*
 					//~ pout<< " da_da = " <<dA_da<<"\n\n";
-										
-/*
+/*										
+
 			TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (- P_j_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
 			
 			
@@ -2599,18 +2695,19 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 							       
 		    }
 #endif
-*/
-			
+
+*/			
                    
                 
                   // Using the exterior traciton tau_e
-/*
+
                     VectorValue<double>  omega, nn, nnxomega;
                   
                   
 			    	for (unsigned int dd = 0; dd < NDIM; ++dd)  nn(dd) = N_qp[NDIM * local_indices[k] + dd];
 
-#if(NDIM == 2)	
+#if(NDIM == 2)
+					nn(2) = 0.0;
 					omega(0) = 0.0;
 					omega(1) = 0.0;
 					omega(2) = dv_o_qp[NDIM * local_indices[k]] - du_o_qp[NDIM * local_indices[k] + 1];
@@ -2623,7 +2720,9 @@ System& du_j_system = equation_systems->get_system(DU_J_SYSTEM_NAME);
 					omega(2) = dv_o_qp[NDIM * local_indices[k]] - du_o_qp[NDIM * local_indices[k] + 1];
 #endif
 					nnxomega = nn.cross(omega);
-*/
+
+
+
 if (d_add_vorticity_term)
 {
 					VectorValue<double>  nn, viscterm;
@@ -2661,14 +2760,17 @@ if (d_add_vorticity_term)
 					for (unsigned int jj=0; jj<NDIM; ++jj)
 						viscterm(ii) += (DU_O(ii,jj) + DTU_O(ii,jj)) * nn(jj);
 					
+					
 	
-            				 
-				TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (- P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis] + d_mu * viscterm(axis));
+            					 
+				//TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (- P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis] + d_mu * viscterm(axis));
+				TAU_qp[NDIM * local_indices[k] + axis] =  (1.0/dA_da) * (2.0 * d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] - P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis] - d_mu * nnxomega(axis));
  }
 else
-{	
-				TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)* (d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] - P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
+{
+				TAU_qp[NDIM * local_indices[k] + axis] = (1.0/dA_da)*(d_mu * WSS_o_qp[NDIM * local_indices[k] + axis] - P_o_qp[local_indices[k]] * N_qp[NDIM * local_indices[k] + axis]);
 }
+
                 }
             }
         }
@@ -2951,8 +3053,7 @@ void IBFEMethod::calcHydroF(const double data_time, const int u_idx, const int p
 			Pointer<Patch<NDIM> > patch = level->getPatch(p());
 			const int patch_num = patch->getPatchNumber();
 			const Box<NDIM>& box = patch->getBox();
-			const Box<NDIM> ghost_box = Box<NDIM>::grow(box, IntVector<NDIM>(2));
-			patch_boxes.push_back(std::make_pair(patch_num, ghost_box));
+			patch_boxes.push_back(std::make_pair(patch_num, box));
 		}
 		
 		    
@@ -3084,7 +3185,7 @@ void IBFEMethod::calcHydroF(const double data_time, const int u_idx, const int p
                     }
                     N_qp[NDIM * (qp_offset + qp) + i] = n(i);
                     
-                    X_qp[NDIM * (qp_offset + qp) + i] += 2.0 * n(i) * dh;
+                    X_qp[NDIM * (qp_offset + qp) + i] += 2.5 * n(i) * dh;
                 }
                 
                             //const double* const
@@ -3635,11 +3736,11 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                     N_qp[NDIM * (qp_offset + qp) + i] = n(i);
                 }
 
-                X_qp_px[NDIM * (qp_offset + qp)] +=  (n(0) > 0.0 ? 1.0 : -1.0) * dx[0];
+                X_qp_px[NDIM * (qp_offset + qp)] +=   (n(0) > 0.0 ? 1.0 : -1.0) * dx[0];
                 X_qp_py[NDIM * (qp_offset + qp) + 1] += (n(1) > 0.0 ? 1.0 : -1.0) * dx[1];
 
 #if (NDIM == 3)
-                X_qp_pz[NDIM * (qp_offset + qp) + 2] += (n(2) > 0.0 ? 1.0 : -1.0) * dx[2];
+                X_qp_pz[NDIM * (qp_offset + qp) + 2] +=  (n(2) > 0.0 ? 1.0 : -1.0) * dx[2];
                 
 #endif
             }
@@ -3660,45 +3761,44 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 			Pointer<SideData<NDIM, double> >  u_sc_data = patch->getPatchData(u_data_idx);
 
 			
+			
             const IntVector<NDIM>& u_gcw = u_sc_data->getGhostCellWidth();
-
+            const Box<NDIM> ghost_box = Box<NDIM>::grow(patch->getBox(), IntVector<NDIM>(2));
 
             const int u_depth = u_sc_data->getDepth();
             TBOX_ASSERT(u_depth == 1);
             
             boost::array<double, NDIM> x_lower_gh, x_upper_gh;
-            double diag_dis = 0.0;
+			
+			x_lower_gh[0] = x_lower_gh[1] = 0.0;
+			x_upper_gh[0] = x_upper_gh[1] = 0.0;
+#if (NDIM == 3)
+		
+			x_lower_gh[2] = x_upper_gh[2] = 0.0;
+#endif
+
+            
+            
             for (unsigned int d = 0; d < NDIM; ++d)
             {
-                diag_dis += dx[d] * dx[d];
-            }
-            const double dh = d_vel_interp_width * sqrt(diag_dis);
+				x_lower_gh[d] = x_lower[d] - (static_cast<double>(2)) * dx[d];
+				x_upper_gh[d] = x_upper[d] + (static_cast<double>(2)) * dx[d];
+				
+			}
+
             
-            
-            const int u_ghost_num = static_cast<double>(ceil(dh/patch_dx_min));
-            
-            
-            for (unsigned int d = 0; d < NDIM; ++d)
-            {
-				x_lower_gh[d] = x_lower[d] - (static_cast<double>(u_ghost_num)) * dx[d];
-				x_upper_gh[d] = x_upper[d] + (static_cast<double>(u_ghost_num)) * dx[d];
-            }
             
             double* x_upper_ghost = &x_upper_gh[0];
             double* x_lower_ghost = &x_lower_gh[0];
-            
-            const Box<NDIM> ghost_box = Box<NDIM>::grow(patch->getBox(), IntVector<NDIM>(u_ghost_num));
-            
-            
     
             std::vector<int> local_indices;
 			local_indices.clear();
-			
+
+
 			const int upper_bound = n_qp_patch;
 			if (upper_bound == 0) return;
 
 			local_indices.reserve(upper_bound);
-
 
 			for (unsigned int k = 0; k < upper_bound; ++k)
 			{
@@ -3707,32 +3807,32 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 				if (patch_box.contains(i)) local_indices.push_back(k);
 				
 				
-				const double* const Xpy = &X_qp_py[NDIM * k];
-				const Index<NDIM> ipy = IndexUtilities::getCellIndex(Xpy, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());  
+				const double* const xpx = &X_qp_px[NDIM * k];
+				const Index<NDIM> ix = IndexUtilities::getCellIndex(xpx, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper());  
 				
-				if (!ghost_box.contains(ipy) && patch_box.contains(i)) 
+				if (!ghost_box.contains(ix) && patch_box.contains(i)) 
 					TBOX_ERROR(d_object_name
                        << "::IBFEMethod():\n"
                        << " the velocity interpolation ghost width hasn't beeen properly set"
                        << std::endl);
 				
-				const double* const Xpx = &X_qp_px[NDIM * k];
-				const Index<NDIM> ipx = IndexUtilities::getCellIndex(Xpx, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper()); 
-				if (!ghost_box.contains(ipx) && patch_box.contains(i))
+				const double* const xpy = &X_qp_py[NDIM * k];
+				const Index<NDIM> iy = IndexUtilities::getCellIndex(xpy, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper()); 
+				if (!ghost_box.contains(iy) && patch_box.contains(i))
+				       TBOX_ERROR(d_object_name
+                       << "::IBFEMethod():\n"
+                       << " the velocity interpolation ghost width hasn't beeen properly set"
+                       << std::endl);
+#if (NDIM == 3)  
+				const double* const xpz = &X_qp_pz[NDIM * k];
+				const Index<NDIM> iz = IndexUtilities::getCellIndex(xpz, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper()); 
+				if (!ghost_box.contains(iz) && patch_box.contains(i))
 				       TBOX_ERROR(d_object_name
                        << "::IBFEMethod():\n"
                        << " the velocity interpolation ghost width hasn't beeen properly set"
                        << std::endl);
 
-#if (NDIM == 3)
-				const double* const Xpz = &X_qp_pz[NDIM * k];
-				const Index<NDIM> ipz = IndexUtilities::getCellIndex(Xpz, x_lower_ghost, x_upper_ghost, patch_geom->getDx(), ghost_box.lower(), ghost_box.upper()); 
-				if (!ghost_box.contains(ipz) && patch_box.contains(i))
-				       TBOX_ERROR(d_object_name
-                       << "::IBFEMethod():\n"
-                       << " the velocity interpolation ghost width hasn't beeen properly set"
-                       << std::endl);
-#endif
+#endif 
 			}
 			
 			std::vector<double> periodic_shifts(NDIM * local_indices.size());
@@ -3741,7 +3841,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 
 		    const unsigned int nindices = static_cast<int>(local_indices.size());
 		    
-    
+   
         typedef boost::multi_array_types::extent_range range;
 
         if (!local_indices.empty())
@@ -3765,24 +3865,32 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
             boost::array<double, 2> w2, wr2, wr2_px, w2_px, w2_py;
             boost::array<double, 2> wr2_pz, wr0_pz, wr1_pz, wr2_py;
             boost::array<double, NDIM> LLL, LUL, ULL, LUU, UUU, ULU, UUL, LLU;
+            boost::array<double, NDIM> LLL_px, LUL_px, ULL_px, LUU_px, UUU_px, ULU_px, UUL_px, LLU_px;
+            boost::array<double, NDIM> LLL_py, LUL_py, ULL_py, LUU_py, UUU_py, ULU_py, UUL_py, LLU_py;
+            boost::array<double, NDIM> LLL_pz, LUL_pz, ULL_pz, LUU_pz, UUU_pz, ULU_pz, UUL_pz, LLU_pz;
             boost::array<double, 2> w0_pz, w1_pz, w2_pz;
             boost::array<int, NDIM> ic_trimmed_lower_pz, ic_trimmed_upper_pz, ic_lower_pz, ic_upper_pz;
 #endif
-            boost::array<double, NDIM> x_lower_axis, x_upper_axis;
+            boost::array<double, NDIM> x_lower_axis, x_upper_axis, x_lower_axis_pm, x_upper_axis_pm ;
             const int local_sz = (*std::max_element(local_indices.begin(), local_indices.end())) + 1;
+
             std::vector<double> Q_data_axis(local_sz);
             std::vector<double> Q_data_axis_px(local_sz), Q_data_axis_py(local_sz);
 
 
             x_lower_axis[0] = x_lower_axis[1] = x_upper_axis[0] = x_upper_axis[1] = 0.0;
+            x_lower_axis_pm[0] = x_lower_axis_pm[1] = x_upper_axis_pm[0] = x_upper_axis_pm[1] = 0.0;
 
 #if (NDIM == 3)
+
             std::vector<double> Q_data_axis_pz(local_sz);
-            x_lower_axis[2] = x_lower_axis[2] = 0.0;
+            x_lower_axis[2] = x_upper_axis[2] = 0.0;
+            x_lower_axis_pm[2] = x_upper_axis_pm[2] = 0.0;
 #endif
 
             Box<NDIM> side_boxes[NDIM];
 
+            Box<NDIM> side_boxes_ghost[NDIM];
 
             for (unsigned int axis = 0; axis < NDIM; ++axis)
             {
@@ -3790,17 +3898,27 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                 {
                     x_lower_axis[d] = x_lower[d];
                     x_upper_axis[d] = x_upper[d];
+                    
+                    x_lower_axis_pm[d] = x_lower[d] - 2.0 * dx[d];
+                    x_upper_axis_pm[d] = x_upper[d] + 2.0 * dx[d];
                 }
                 x_lower_axis[axis] -= 0.5 * dx[axis];
                 x_upper_axis[axis] += 0.5 * dx[axis];
+                
+                x_lower_axis_pm[axis] -= 0.5 * dx[axis];
+                x_upper_axis_pm[axis] += 0.5 * dx[axis];
 
                 for (int d = 0; d < NDIM; ++d)
                 {
-                    side_boxes[d] = SideGeometry<NDIM>::toSideBox(ghost_box, d);
+                    side_boxes[d] = SideGeometry<NDIM>::toSideBox(patch_box, d);
+                    side_boxes_ghost[d] = SideGeometry<NDIM>::toSideBox(ghost_box, d);
                 }
 
                 const IntVector<NDIM>& ilower = side_boxes[axis].lower();
                 const IntVector<NDIM>& iupper = side_boxes[axis].upper();
+                
+                const IntVector<NDIM>& ilower_pm = side_boxes_ghost[axis].lower();
+                const IntVector<NDIM>& iupper_pm = side_boxes_ghost[axis].upper();
 
                 boost::const_multi_array_ref<double, NDIM + 1> u_sc_data_array(
                     u_sc_data->getPointer(axis),
@@ -3811,6 +3929,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 #endif
                                    [range(0, u_depth)]),
                     boost::fortran_storage_order());
+
 
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
@@ -3826,7 +3945,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 						X_shifted_pz[d] = X_qp_pz[d + s * NDIM] + periodic_shifts[d + k * NDIM];
 #endif
                     }
-
+                    
 
 
                     for (unsigned int d = 0; d < NDIM; ++d)
@@ -3847,9 +3966,9 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                         ic_trimmed_lower[d] = std::max(ic_lower[d], ilower[d] - u_gcw[d]);
                         ic_trimmed_upper[d] = std::min(ic_upper[d], iupper[d] + u_gcw[d]);
 
-                        ic_center_px[d] = ilower[d] + NINT((X_shifted_px[d] - x_lower_axis[d]) / dx[d] - 0.5);
+                        ic_center_px[d] = ilower_pm[d] + NINT((X_shifted_px[d] - x_lower_axis_pm[d]) / dx[d] - 0.5);
                         X_cell_px[d] =
-                            x_lower_axis[d] + (static_cast<double>(ic_center_px[d] - ilower[d]) + 0.5) * dx[d];
+                            x_lower_axis_pm[d] + (static_cast<double>(ic_center_px[d] - ilower_pm[d]) + 0.5) * dx[d];
 
                         if (X_shifted_px[d] <= X_cell_px[d])
                         {
@@ -3861,14 +3980,14 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                             ic_lower_px[d] = ic_center_px[d];
                             ic_upper_px[d] = ic_center_px[d] + 1;
                         }
-                        ic_trimmed_lower_px[d] = std::max(ic_lower_px[d], ilower[d] - u_gcw[d]);
-                        ic_trimmed_upper_px[d] = std::min(ic_upper_px[d], iupper[d] + u_gcw[d]);
+                        ic_trimmed_lower_px[d] = std::max(ic_lower_px[d], ilower_pm[d] - u_gcw[d]);
+                        ic_trimmed_upper_px[d] = std::min(ic_upper_px[d], iupper_pm[d] + u_gcw[d]);
                         
                         
 
-                        ic_center_py[d] = ilower[d] + NINT((X_shifted_py[d] - x_lower_axis[d]) / dx[d] - 0.5);
+                        ic_center_py[d] = ilower_pm[d] + NINT((X_shifted_py[d] - x_lower_axis_pm[d]) / dx[d] - 0.5);
                         X_cell_py[d] =
-                            x_lower_axis[d] + (static_cast<double>(ic_center_py[d] - ilower[d]) + 0.5) * dx[d];
+                            x_lower_axis_pm[d] + (static_cast<double>(ic_center_py[d] - ilower_pm[d]) + 0.5) * dx[d];
 
                         if (X_shifted_py[d] <= X_cell_py[d])
                         {
@@ -3880,13 +3999,13 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                             ic_lower_py[d] = ic_center_py[d];
                             ic_upper_py[d] = ic_center_py[d] + 1;
                         }
-                        ic_trimmed_lower_py[d] = std::max(ic_lower_py[d], ilower[d] - u_gcw[d]);
-                        ic_trimmed_upper_py[d] = std::min(ic_upper_py[d], iupper[d] + u_gcw[d]);
+                        ic_trimmed_lower_py[d] = std::max(ic_lower_py[d], ilower_pm[d] - u_gcw[d]);
+                        ic_trimmed_upper_py[d] = std::min(ic_upper_py[d], iupper_pm[d] + u_gcw[d]);
  #if (NDIM == 3)
  
-                        ic_center_pz[d] = ilower[d] + NINT((X_shifted_pz[d] - x_lower_axis[d]) / dx[d] - 0.5);
+                        ic_center_pz[d] = ilower_pm[d] + NINT((X_shifted_pz[d] - x_lower_axis_pm[d]) / dx[d] - 0.5);
                         X_cell_pz[d] =
-                            x_lower_axis[d] + (static_cast<double>(ic_center_pz[d] - ilower[d]) + 0.5) * dx[d];
+                            x_lower_axis_pm[d] + (static_cast<double>(ic_center_pz[d] - ilower_pm[d]) + 0.5) * dx[d];
 
                         if (X_shifted_pz[d] <= X_cell_pz[d])
                         {
@@ -3898,136 +4017,87 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                             ic_lower_pz[d] = ic_center_pz[d];
                             ic_upper_pz[d] = ic_center_pz[d] + 1;
                         }
-                        ic_trimmed_lower_pz[d] = std::max(ic_lower_pz[d], ilower[d] - u_gcw[d]);
+                        ic_trimmed_lower_pz[d] = std::max(ic_lower_pz[d], ilower_pm[d] - u_gcw[d]);
  
-						ic_trimmed_upper_pz[d] = std::min(ic_upper_pz[d], iupper[d] + u_gcw[d]);
+						ic_trimmed_upper_pz[d] = std::min(ic_upper_pz[d], iupper_pm[d] + u_gcw[d]);
  #endif                        
 
                     }
 
                     if (X_shifted[0] <= X_cell[0])
-                    {
                         w0[0] = (X_cell[0] - X_shifted[0]) / dx[0];
-                        wr0[0] = w0[0];
-                        w0[1] = 1.0 - w0[0];
-                        wr0[1] = -w0[1];
-                    }
                     else
-                    {
                         w0[0] = 1.0 + (X_cell[0] - X_shifted[0]) / dx[0];
-                        wr0[0] = w0[0];
-                        w0[1] = 1.0 - w0[0];
-                        wr0[1] = -w0[1];
-                    }
+
+                    wr0[0] = w0[0];
+                    w0[1] = 1.0 - w0[0];
+                    wr0[1] = -w0[1];
 
                     if (X_shifted[1] <= X_cell[1])
-                    {
                         w1[0] = (X_cell[1] - X_shifted[1]) / dx[1];
-                        wr1[0] = w1[0];
-                        w1[1] = 1.0 - w1[0];
-                        wr1[1] = -w1[1];
-                    }
                     else
-                    {
                         w1[0] = 1.0 + (X_cell[1] - X_shifted[1]) / dx[1];
-                        wr1[0] = w1[0];
-                        w1[1] = 1.0 - w1[0];
-                        wr1[1] = -w1[1];
-                    }
+                    wr1[0] = w1[0];
+                    w1[1] = 1.0 - w1[0];
+                    wr1[1] = -w1[1];
+
 #if (NDIM == 3)
                     if (X_shifted[2] <= X_cell[2])
-                    {
                         w2[0] = (X_cell[2] - X_shifted[2]) / dx[2];
-                        wr2[0] = w2[0];
-                        w2[1] = 1.0 - w2[0];
-                        wr2[1] = -w2[1];
-                    }
                     else
-                    {
                         w2[0] = 1.0 + (X_cell[2] - X_shifted[2]) / dx[2];
-                        wr2[0] = w2[0];
-                        w2[1] = 1.0 - w2[0];
-                        wr2[1] = -w2[1];
-                    }
+                    wr2[0] = w2[0];
+                    w2[1] = 1.0 - w2[0];
+                    wr2[1] = -w2[1];
 #endif
 
                     if (X_shifted_px[0] <= X_cell_px[0])
-                    {
+
                         w0_px[0] = (X_cell_px[0] - X_shifted_px[0]) / dx[0];
-						wr0_px[0] = w0_px[0];
-                        w0_px[1] = 1.0 - w0_px[0];
-                        wr0_px[1] = -w0_px[1];
-                        
-                    }
+
                     else
-                    {
                         w0_px[0] = 1.0 + (X_cell_px[0] - X_shifted_px[0]) / dx[0];
-                        wr0_px[0] = w0_px[0];
-                        w0_px[1] = 1.0 - w0_px[0];
-                        wr0_px[1] = -w0_px[1];
-                    }
+                    wr0_px[0] = w0_px[0];
+                    w0_px[1] = 1.0 - w0_px[0];
+                    wr0_px[1] = -w0_px[1];
+
 
                     if (X_shifted_py[0] <= X_cell_py[0])
-                    {
                         w0_py[0] = (X_cell_py[0] - X_shifted_py[0]) / dx[0];
-						wr0_py[0] = w0_py[0];
-                        w0_py[1] = 1.0 - w0_py[0];
-                        wr0_py[1] = -w0_py[1];
-                    }
                     else
-                    {
                         w0_py[0] = 1.0 + (X_cell_py[0] - X_shifted_py[0]) / dx[0];
-                        wr0_py[0] = w0_py[0];
-                        w0_py[1] = 1.0 - w0_py[0];
-                        wr0_py[1] = -w0_py[1];
-                    }
+                     wr0_py[0] = w0_py[0];
+                     w0_py[1] = 1.0 - w0_py[0];
+                     wr0_py[1] = -w0_py[1];
+
 
                     if (X_shifted_px[1] <= X_cell_px[1])
-                    {
                         w1_px[0] = (X_cell_px[1] - X_shifted_px[1]) / dx[1];
-                        wr1_px[0] = w1_px[0];
-                        w1_px[1] = 1.0 - w1_px[0];
-                        wr1_px[1] = -w1_px[1];
-                    }
                     else
-                    {
                         w1_px[0] = 1.0 + (X_cell_px[1] - X_shifted_px[1]) / dx[1];
-                        wr1_px[0] = w1_px[0];
-                        w1_px[1] = 1.0 - w1_px[0];
-                        wr1_px[1] = -w1_px[1];
-                    }
+                     wr1_px[0] = w1_px[0];
+                     w1_px[1] = 1.0 - w1_px[0];
+                     wr1_px[1] = -w1_px[1];
+                    
 
                     if (X_shifted_py[1] <= X_cell_py[1])
-                    {
                         w1_py[0] = (X_cell_py[1] - X_shifted_py[1]) / dx[1];
-                        wr1_py[0] = w1_py[0];
-                        w1_py[1] = 1.0 - w1_py[0];
-                        wr1_py[1] = -w1_py[1];
-                    }
                     else
-                    {
                         w1_py[0] = 1.0 + (X_cell_py[1] - X_shifted_py[1]) / dx[1];
-                        wr1_py[0] = w1_py[0];
-                        w1_py[1] = 1.0 - w1_py[0];
-                        wr1_py[1] = -w1_py[1];
-                    }
-                    
+                    wr1_py[0] = w1_py[0];
+                    w1_py[1] = 1.0 - w1_py[0];
+                    wr1_py[1] = -w1_py[1];
+                
 
 #if (NDIM == 3)
                     if (X_shifted_px[2] <= X_cell_px[2])
-                    {
                         w2_px[0] = (X_cell_px[2] - X_shifted_px[2]) / dx[2];
-                        wr2_px[0] = w2_px[0];
-                        w2_px[1] = 1.0 - w2_px[0];
-                        wr2_px[1] = -w2_px[1];
-                    }
                     else
-                    {
                         w2_px[0] = 1.0 + (X_cell_px[2] - X_shifted_px[2]) / dx[2];
-                        wr2_px[0] =  w2_px[0]; 
-                        w2_px[1] = 1.0 - w2_px[0];
-                        wr2_px[1] = -w2_px[1];
-                    }
+                    wr2_px[0] =  w2_px[0]; 
+                    w2_px[1] = 1.0 - w2_px[0];
+                    wr2_px[1] = -w2_px[1];
+                   
 
                     if (X_shifted_py[2] <= X_cell_py[2])
                     {
@@ -4060,34 +4130,21 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                     }
 
                     if (X_shifted_pz[1] <= X_cell_pz[1])
-                    {
                         w1_pz[0] = (X_cell_pz[1] - X_shifted_pz[1]) / dx[1];
-                        wr1_pz[0] = w1_pz[0];
-                        w1_pz[1] = 1.0 - w1_pz[0];
-                        wr1_pz[1] = - w1_pz[1];
-                    }
                     else
-                    {
                         w1_pz[0] = 1.0 + (X_cell_pz[1] - X_shifted_pz[1]) / dx[1];
-                        wr1_pz[0] = w1_pz[0];
-                        w1_pz[1] = 1.0 - w1_pz[0];
-                        wr1_pz[1] = - w1_pz[1];
-                    }
+                    wr1_pz[0] = w1_pz[0];
+                    w1_pz[1] = 1.0 - w1_pz[0];
+                    wr1_pz[1] = - w1_pz[1];
+
 
                     if (X_shifted_pz[2] <= X_cell_pz[2])
-                    {
                         w2_pz[0] = (X_cell_pz[2] - X_shifted_pz[2]) / dx[2];
-                        wr2_pz[0] = w2_pz[0];
-                        w2_pz[1] = 1.0 - w2_pz[0];
-                        wr2_pz[1] = - w2_pz[1];
-                    }
                     else
-                    {
                         w2_pz[0] = 1.0 + (X_cell_pz[2] - X_shifted_pz[2]) / dx[2];
-                        wr2_pz[0] = w2_pz[0];
-                        w2_pz[1] = 1.0 - w2_pz[0];
-                        wr2_pz[1] = - w2_pz[1];
-                    }
+                    wr2_pz[0] = w2_pz[0];
+                    w2_pz[1] = 1.0 - w2_pz[0];
+                    wr2_pz[1] = - w2_pz[1];
 
 #endif
 
@@ -4152,9 +4209,34 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                         boost::extents[range(ic_trimmed_lower[0], ic_trimmed_upper[0] + 1)]
                                       [range(ic_trimmed_lower[1], ic_trimmed_upper[1] + 1)]
                                       [range(ic_trimmed_lower[2], ic_trimmed_upper[2] + 1)]);
+                                      
+                   boost::multi_array<double, NDIM> wjumppx(
+                        boost::extents[range(ic_trimmed_lower_px[0], ic_trimmed_upper_px[0] + 1)]
+                                      [range(ic_trimmed_lower_px[1], ic_trimmed_upper_px[1] + 1)]
+                                      [range(ic_trimmed_lower_px[2], ic_trimmed_upper_px[2] + 1)]);
+                                      
+                    boost::multi_array<double, NDIM> wjumppy(
+                        boost::extents[range(ic_trimmed_lower_py[0], ic_trimmed_upper_py[0] + 1)]
+                                      [range(ic_trimmed_lower_py[1], ic_trimmed_upper_py[1] + 1)]
+                                      [range(ic_trimmed_lower_py[2], ic_trimmed_upper_py[2] + 1)]);
+                                      
+                                      
+                    boost::multi_array<double, NDIM> wjumppz(
+                        boost::extents[range(ic_trimmed_lower_pz[0], ic_trimmed_upper_pz[0] + 1)]
+                                      [range(ic_trimmed_lower_pz[1], ic_trimmed_upper_pz[1] + 1)]
+                                      [range(ic_trimmed_lower_pz[2], ic_trimmed_upper_pz[2] + 1)]);
+                                      
+                    boost::multi_array<double, NDIM> ujumppz(
+                        boost::extents[range(ic_trimmed_lower_pz[0], ic_trimmed_upper_pz[0] + 1)]
+                                      [range(ic_trimmed_lower_pz[1], ic_trimmed_upper_pz[1] + 1)]
+                                      [range(ic_trimmed_lower_pz[2], ic_trimmed_upper_pz[2] + 1)]);
+                                      
+                    boost::multi_array<double, NDIM> vjumppz(
+                        boost::extents[range(ic_trimmed_lower_pz[0], ic_trimmed_upper_pz[0] + 1)]
+                                      [range(ic_trimmed_lower_pz[1], ic_trimmed_upper_pz[1] + 1)]
+                                      [range(ic_trimmed_lower_pz[2], ic_trimmed_upper_pz[2] + 1)]);
 #endif
 
-    
 
 #if (NDIM == 2)
 
@@ -4180,6 +4262,8 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                     }
                     
 
+
+    
                     ujump[ic_trimmed_lower[0]][ic_trimmed_lower[1]] =
                         dx[0] * w0[0] * w1[0] * (LL[0] * du_j_qp[s * NDIM] + LL[1] * du_j_qp[1 + s * NDIM]);
                     vjump[ic_trimmed_lower[0]][ic_trimmed_lower[1]] =
@@ -4223,7 +4307,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                         dx[0] * w0_px[1] * w1_px[1] * (UU_px[0] * du_j_qp[s * NDIM] + UU_px[1] * du_j_qp[1 + s * NDIM]);
 
                     vjumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]] = 
-							dx[1] * w0_px[1] * w1_px[1] * (UU_px[0] * dv_j_qp[s * NDIM] + UU_px[1] * dv_j_qp[1 + s * NDIM]);
+						dx[1] * w0_px[1] * w1_px[1] * (UU_px[0] * dv_j_qp[s * NDIM] + UU_px[1] * dv_j_qp[1 + s * NDIM]);
 
                     ujumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]] =
                         dx[0] * w0_px[0] * w1_px[1] * (LU_px[0] * du_j_qp[s * NDIM] + LU_px[1] * du_j_qp[1 + s * NDIM]);
@@ -4284,7 +4368,61 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                  N_qp[s * NDIM + d];
                         LUU[d] = (N_qp[s * NDIM] * wr0[1] + N_qp[s * NDIM + 1] * wr1[0] + N_qp[s * NDIM + 2] * wr2[0]) *
                                  N_qp[s * NDIM + d];
+                                 
+                        LLL_px[d] = (N_qp[s * NDIM] * wr0_px[1] + N_qp[s * NDIM + 1] * wr1_px[1] + N_qp[s * NDIM + 2] * wr2_px[1]) *
+                                 N_qp[s * NDIM + d];
+                        LLU_px[d] = (N_qp[s * NDIM] * wr0_px[1] + N_qp[s * NDIM + 1] * wr1_px[1] + N_qp[s * NDIM + 2] * wr2_px[0]) *
+                                 N_qp[s * NDIM + d];
+                        LUL_px[d] = (N_qp[s * NDIM] * wr0_px[1] + N_qp[s * NDIM + 1] * wr1_px[0] + N_qp[s * NDIM + 2] * wr2_px[1]) *
+                                 N_qp[s * NDIM + d];
+                        ULL_px[d] = (N_qp[s * NDIM] * wr0_px[0] + N_qp[s * NDIM + 1] * wr1_px[1] + N_qp[s * NDIM + 2] * wr2_px[1]) *
+                                 N_qp[s * NDIM + d];
+                        UUL_px[d] = (N_qp[s * NDIM] * wr0_px[0] + N_qp[s * NDIM + 1] * wr1_px[0] + N_qp[s * NDIM + 2] * wr2_px[1]) *
+                                 N_qp[s * NDIM + d];
+                        ULU_px[d] = (N_qp[s * NDIM] * wr0_px[0] + N_qp[s * NDIM + 1] * wr1_px[1] + N_qp[s * NDIM + 2] * wr2_px[0]) *
+                                 N_qp[s * NDIM + d];
+                        UUU_px[d] = (N_qp[s * NDIM] * wr0_px[0] + N_qp[s * NDIM + 1] * wr1_px[0] + N_qp[s * NDIM + 2] * wr2_px[0]) *
+                                 N_qp[s * NDIM + d];
+                        LUU_px[d] = (N_qp[s * NDIM] * wr0_px[1] + N_qp[s * NDIM + 1] * wr1_px[0] + N_qp[s * NDIM + 2] * wr2_px[0]) *
+                                 N_qp[s * NDIM + d];
+                                 
+                                 
+                        LLL_py[d] = (N_qp[s * NDIM] * wr0_py[1] + N_qp[s * NDIM + 1] * wr1_py[1] + N_qp[s * NDIM + 2] * wr2_py[1]) *
+                                 N_qp[s * NDIM + d];
+                        LLU_py[d] = (N_qp[s * NDIM] * wr0_py[1] + N_qp[s * NDIM + 1] * wr1_py[1] + N_qp[s * NDIM + 2] * wr2_py[0]) *
+                                 N_qp[s * NDIM + d];
+                        LUL_py[d] = (N_qp[s * NDIM] * wr0_py[1] + N_qp[s * NDIM + 1] * wr1_py[0] + N_qp[s * NDIM + 2] * wr2_py[1]) *
+                                 N_qp[s * NDIM + d];
+                        ULL_py[d] = (N_qp[s * NDIM] * wr0_py[0] + N_qp[s * NDIM + 1] * wr1_py[1] + N_qp[s * NDIM + 2] * wr2_py[1]) *
+                                 N_qp[s * NDIM + d];
+                        UUL_py[d] = (N_qp[s * NDIM] * wr0_py[0] + N_qp[s * NDIM + 1] * wr1_py[0] + N_qp[s * NDIM + 2] * wr2_py[1]) *
+                                 N_qp[s * NDIM + d];
+                        ULU_py[d] = (N_qp[s * NDIM] * wr0_py[0] + N_qp[s * NDIM + 1] * wr1_py[1] + N_qp[s * NDIM + 2] * wr2_py[0]) *
+                                 N_qp[s * NDIM + d];
+                        UUU_py[d] = (N_qp[s * NDIM] * wr0_py[0] + N_qp[s * NDIM + 1] * wr1_py[0] + N_qp[s * NDIM + 2] * wr2_py[0]) *
+                                 N_qp[s * NDIM + d];
+                        LUU_py[d] = (N_qp[s * NDIM] * wr0_py[1] + N_qp[s * NDIM + 1] * wr1_py[0] + N_qp[s * NDIM + 2] * wr2_py[0]) *
+                                 N_qp[s * NDIM + d];
+                                 
+                                 
+                        LLL_pz[d] = (N_qp[s * NDIM] * wr0_pz[1] + N_qp[s * NDIM + 1] * wr1_pz[1] + N_qp[s * NDIM + 2] * wr2_pz[1]) *
+                                 N_qp[s * NDIM + d];
+                        LLU_pz[d] = (N_qp[s * NDIM] * wr0_pz[1] + N_qp[s * NDIM + 1] * wr1_pz[1] + N_qp[s * NDIM + 2] * wr2_pz[0]) *
+                                 N_qp[s * NDIM + d];
+                        LUL_pz[d] = (N_qp[s * NDIM] * wr0_pz[1] + N_qp[s * NDIM + 1] * wr1_pz[0] + N_qp[s * NDIM + 2] * wr2_pz[1]) *
+                                 N_qp[s * NDIM + d];
+                        ULL_pz[d] = (N_qp[s * NDIM] * wr0_pz[0] + N_qp[s * NDIM + 1] * wr1_pz[1] + N_qp[s * NDIM + 2] * wr2_pz[1]) *
+                                 N_qp[s * NDIM + d];
+                        UUL_pz[d] = (N_qp[s * NDIM] * wr0_pz[0] + N_qp[s * NDIM + 1] * wr1_pz[0] + N_qp[s * NDIM + 2] * wr2_pz[1]) *
+                                 N_qp[s * NDIM + d];
+                        ULU_pz[d] = (N_qp[s * NDIM] * wr0_pz[0] + N_qp[s * NDIM + 1] * wr1_pz[1] + N_qp[s * NDIM + 2] * wr2_pz[0]) *
+                                 N_qp[s * NDIM + d];
+                        UUU_pz[d] = (N_qp[s * NDIM] * wr0_pz[0] + N_qp[s * NDIM + 1] * wr1_pz[0] + N_qp[s * NDIM + 2] * wr2_pz[0]) *
+                                 N_qp[s * NDIM + d];
+                        LUU_pz[d] = (N_qp[s * NDIM] * wr0_pz[1] + N_qp[s * NDIM + 1] * wr1_pz[0] + N_qp[s * NDIM + 2] * wr2_pz[0]) *
+                                 N_qp[s * NDIM + d];
                     }
+                   
 
                     ujump[ic_trimmed_lower[0]][ic_trimmed_lower[1]][ic_trimmed_lower[2]] =
                         dx[0] * w0[0] * w1[0] * w2[0] *
@@ -4365,9 +4503,256 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                     wjump[ic_trimmed_upper[0]][ic_trimmed_upper[1]][ic_trimmed_upper[2]] =
                         dx[2] * w0[1] * w1[1] * w2[1] *
                         (UUU[0] * dw_j_qp[s * NDIM] + UUU[1] * dw_j_qp[1 + s * NDIM] + UUU[2] * dw_j_qp[2 + s * NDIM]);
+                        
+                        
+                        
+                    ujumppx[ic_trimmed_lower_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[0] * w0_px[0] * w1_px[0] * w2_px[0] *
+                        (LLL_px[0] * du_j_qp[s * NDIM] + LLL_px[1] * du_j_qp[1 + s * NDIM] + LLL_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_lower_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[1] * w0_px[0] * w1_px[0] * w2_px[0] *
+                        (LLL_px[0] * dv_j_qp[s * NDIM] + LLL_px[1] * dv_j_qp[1 + s * NDIM] + LLL_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_lower_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[2] * w0_px[0] * w1_px[0] * w2_px[0] *
+                        (LLL_px[0] * dw_j_qp[s * NDIM] + LLL_px[1] * dw_j_qp[1 + s * NDIM] + LLL_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_upper_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[0] * w0_px[1] * w1_px[0] * w2_px[0] *
+                        (ULL_px[0] * du_j_qp[s * NDIM] + ULL_px[1] * du_j_qp[1 + s * NDIM] + ULL_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_upper_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[1] * w0_px[1] * w1_px[0] * w2_px[0] *
+                        (ULL_px[0] * dv_j_qp[s * NDIM] + ULL_px[1] * dv_j_qp[1 + s * NDIM] + ULL_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_upper_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[2] * w0_px[1] * w1_px[0] * w2_px[0] *
+                        (ULL_px[0] * dw_j_qp[s * NDIM] + ULL_px[1] * dw_j_qp[1 + s * NDIM] + ULL_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_upper_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[0] * w0_px[1] * w1_px[0] * w2_px[1] *
+                        (ULU_px[0] * du_j_qp[s * NDIM] + ULU_px[1] * du_j_qp[1 + s * NDIM] + ULU_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_upper_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[1] * w0_px[1] * w1_px[0] * w2_px[1] *
+                        (ULU_px[0] * dv_j_qp[s * NDIM] + ULU_px[1] * dv_j_qp[1 + s * NDIM] + ULU_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_upper_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[2] * w0_px[1] * w1_px[0] * w2_px[1] *
+                        (ULU_px[0] * dw_j_qp[s * NDIM] + ULU_px[1] * dw_j_qp[1 + s * NDIM] + ULU_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[0] * w0_px[1] * w1_px[1] * w2_px[0] *
+                        (UUL_px[0] * du_j_qp[s * NDIM] + UUL_px[1] * du_j_qp[1 + s * NDIM] + UUL_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[1] * w0_px[1] * w1_px[1] * w2_px[0] *
+                        (UUL_px[0] * dv_j_qp[s * NDIM] + UUL_px[1] * dv_j_qp[1 + s * NDIM] + UUL_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[2] * w0_px[1] * w1_px[1] * w2_px[0] *
+                        (UUL_px[0] * dw_j_qp[s * NDIM] + UUL_px[1] * dw_j_qp[1 + s * NDIM] + UUL_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[0] * w0_px[0] * w1_px[1] * w2_px[0] *
+                        (LUL_px[0] * du_j_qp[s * NDIM] + LUL_px[1] * du_j_qp[1 + s * NDIM] + LUL_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[1] * w0_px[0] * w1_px[1] * w2_px[0] *
+                        (LUL_px[0] * dv_j_qp[s * NDIM] + LUL_px[1] * dv_j_qp[1 + s * NDIM] + LUL_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_lower_px[2]] =
+                        dx[2] * w0_px[0] * w1_px[1] * w2_px[0] *
+                        (LUL_px[0] * dw_j_qp[s * NDIM] + LUL_px[1] * dw_j_qp[1 + s * NDIM] + LUL_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[0] * w0_px[0] * w1_px[1] * w2_px[1] *
+                        (LUU_px[0] * du_j_qp[s * NDIM] + LUU_px[1] * du_j_qp[1 + s * NDIM] + LUU_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[1] * w0_px[0] * w1_px[1] * w2_px[1] *
+                        (LUU_px[0] * dv_j_qp[s * NDIM] + LUU_px[1] * dv_j_qp[1 + s * NDIM] + LUU_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_lower_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[2] * w0_px[0] * w1_px[1] * w2_px[1] *
+                        (LUU_px[0] * dw_j_qp[s * NDIM] + LUU_px[1] * dw_j_qp[1 + s * NDIM] + LUU_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_lower_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[0] * w0_px[0] * w1_px[0] * w2_px[1] *
+                        (LLU_px[0] * du_j_qp[s * NDIM] + LLU_px[1] * du_j_qp[1 + s * NDIM] + LLU_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_lower_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[1] * w0_px[0] * w1_px[0] * w2_px[1] *
+                        (LLU_px[0] * dv_j_qp[s * NDIM] + LLU_px[1] * dv_j_qp[1 + s * NDIM] + LLU_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_lower_px[0]][ic_trimmed_lower_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[2] * w0_px[0] * w1_px[0] * w2_px[1] *
+                        (LLU_px[0] * dw_j_qp[s * NDIM] + LLU_px[1] * dw_j_qp[1 + s * NDIM] + LLU_px[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[0] * w0_px[1] * w1_px[1] * w2_px[1] *
+                        (UUU_px[0] * du_j_qp[s * NDIM] + UUU_px[1] * du_j_qp[1 + s * NDIM] + UUU_px[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[1] * w0_px[1] * w1_px[1] * w2_px[1] *
+                        (UUU_px[0] * dv_j_qp[s * NDIM] + UUU_px[1] * dv_j_qp[1 + s * NDIM] + UUU_px[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppx[ic_trimmed_upper_px[0]][ic_trimmed_upper_px[1]][ic_trimmed_upper_px[2]] =
+                        dx[2] * w0_px[1] * w1_px[1] * w2_px[1] *
+                        (UUU_px[0] * dw_j_qp[s * NDIM] + UUU_px[1] * dw_j_qp[1 + s * NDIM] + UUU_px[2] * dw_j_qp[2 + s * NDIM]);
+                        
+                        
+                        
+                    ujumppy[ic_trimmed_lower_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[0] * w0_py[0] * w1_py[0] * w2_py[0] *
+                        (LLL_py[0] * du_j_qp[s * NDIM] + LLL_py[1] * du_j_qp[1 + s * NDIM] + LLL_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_lower_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[1] * w0_py[0] * w1_py[0] * w2_py[0] *
+                        (LLL_py[0] * dv_j_qp[s * NDIM] + LLL_py[1] * dv_j_qp[1 + s * NDIM] + LLL_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_lower_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[2] * w0_py[0] * w1_py[0] * w2_py[0] *
+                        (LLL_py[0] * dw_j_qp[s * NDIM] + LLL_py[1] * dw_j_qp[1 + s * NDIM] + LLL_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_upper_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[0] * w0_py[1] * w1_py[0] * w2_py[0] *
+                        (ULL_py[0] * du_j_qp[s * NDIM] + ULL_py[1] * du_j_qp[1 + s * NDIM] + ULL_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_upper_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[1] * w0_py[1] * w1_py[0] * w2_py[0] *
+                        (ULL_py[0] * dv_j_qp[s * NDIM] + ULL_py[1] * dv_j_qp[1 + s * NDIM] + ULL_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_upper_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[2] * w0_py[1] * w1_py[0] * w2_py[0] *
+                        (ULL_py[0] * dw_j_qp[s * NDIM] + ULL_py[1] * dw_j_qp[1 + s * NDIM] + ULL_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_upper_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[0] * w0_py[1] * w1_py[0] * w2_py[1] *
+                        (ULU_py[0] * du_j_qp[s * NDIM] + ULU_py[1] * du_j_qp[1 + s * NDIM] + ULU_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_upper_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[1] * w0_py[1] * w1_py[0] * w2_py[1] *
+                        (ULU_py[0] * dv_j_qp[s * NDIM] + ULU_py[1] * dv_j_qp[1 + s * NDIM] + ULU_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_upper_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[2] * w0_py[1] * w1_py[0] * w2_py[1] *
+                        (ULU_py[0] * dw_j_qp[s * NDIM] + ULU_py[1] * dw_j_qp[1 + s * NDIM] + ULU_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_upper_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[0] * w0_py[1] * w1_py[1] * w2_py[0] *
+                        (UUL_py[0] * du_j_qp[s * NDIM] + UUL_py[1] * du_j_qp[1 + s * NDIM] + UUL_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_upper_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[1] * w0_py[1] * w1_py[1] * w2_py[0] *
+                        (UUL_py[0] * dv_j_qp[s * NDIM] + UUL_py[1] * dv_j_qp[1 + s * NDIM] + UUL_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_upper_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[2] * w0_py[1] * w1_py[1] * w2_py[0] *
+                        (UUL_py[0] * dw_j_qp[s * NDIM] + UUL_py[1] * dw_j_qp[1 + s * NDIM] + UUL_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_lower_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[0] * w0_py[0] * w1_py[1] * w2_py[0] *
+                        (LUL_py[0] * du_j_qp[s * NDIM] + LUL_py[1] * du_j_qp[1 + s * NDIM] + LUL_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_lower_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[1] * w0_py[0] * w1_py[1] * w2_py[0] *
+                        (LUL_py[0] * dv_j_qp[s * NDIM] + LUL_py[1] * dv_j_qp[1 + s * NDIM] + LUL_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_lower_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_lower_py[2]] =
+                        dx[2] * w0_py[0] * w1_py[1] * w2_py[0] *
+                        (LUL_py[0] * dw_j_qp[s * NDIM] + LUL_py[1] * dw_j_qp[1 + s * NDIM] + LUL_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_lower_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[0] * w0_py[0] * w1_py[1] * w2_py[1] *
+                        (LUU_py[0] * du_j_qp[s * NDIM] + LUU_py[1] * du_j_qp[1 + s * NDIM] + LUU_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_lower_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[1] * w0_py[0] * w1_py[1] * w2_py[1] *
+                        (LUU_py[0] * dv_j_qp[s * NDIM] + LUU_py[1] * dv_j_qp[1 + s * NDIM] + LUU_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_lower_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[2] * w0_py[0] * w1_py[1] * w2_py[1] *
+                        (LUU_py[0] * dw_j_qp[s * NDIM] + LUU_py[1] * dw_j_qp[1 + s * NDIM] + LUU_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_lower_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[0] * w0_py[0] * w1_py[0] * w2_py[1] *
+                        (LLU_py[0] * du_j_qp[s * NDIM] + LLU_py[1] * du_j_qp[1 + s * NDIM] + LLU_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_lower_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[1] * w0_py[0] * w1_py[0] * w2_py[1] *
+                        (LLU_py[0] * dv_j_qp[s * NDIM] + LLU_py[1] * dv_j_qp[1 + s * NDIM] + LLU_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_lower_py[0]][ic_trimmed_lower_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[2] * w0_py[0] * w1_py[0] * w2_py[1] *
+                        (LLU_py[0] * dw_j_qp[s * NDIM] + LLU_py[1] * dw_j_qp[1 + s * NDIM] + LLU_py[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppy[ic_trimmed_upper_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[0] * w0_py[1] * w1_py[1] * w2_py[1] *
+                        (UUU_py[0] * du_j_qp[s * NDIM] + UUU_py[1] * du_j_qp[1 + s * NDIM] + UUU_py[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppy[ic_trimmed_upper_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[1] * w0_py[1] * w1_py[1] * w2_py[1] *
+                        (UUU_py[0] * dv_j_qp[s * NDIM] + UUU_py[1] * dv_j_qp[1 + s * NDIM] + UUU_py[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppy[ic_trimmed_upper_py[0]][ic_trimmed_upper_py[1]][ic_trimmed_upper_py[2]] =
+                        dx[2] * w0_py[1] * w1_py[1] * w2_py[1] *
+                        (UUU_py[0] * dw_j_qp[s * NDIM] + UUU_py[1] * dw_j_qp[1 + s * NDIM] + UUU_py[2] * dw_j_qp[2 + s * NDIM]);
+                        
+                        
+                        
+                    ujumppz[ic_trimmed_lower_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[0] * w0_pz[0] * w1_pz[0] * w2_pz[0] *
+                        (LLL_pz[0] * du_j_qp[s * NDIM] + LLL_pz[1] * du_j_qp[1 + s * NDIM] + LLL_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[1] * w0_pz[0] * w1_pz[0] * w2_pz[0] *
+                        (LLL_pz[0] * dv_j_qp[s * NDIM] + LLL_pz[1] * dv_j_qp[1 + s * NDIM] + LLL_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[2] * w0_pz[0] * w1_pz[0] * w2_pz[0] *
+                        (LLL_pz[0] * dw_j_qp[s * NDIM] + LLL_pz[1] * dw_j_qp[1 + s * NDIM] + LLL_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_upper_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[0] * w0_pz[1] * w1_pz[0] * w2_pz[0] *
+                        (ULL_pz[0] * du_j_qp[s * NDIM] + ULL_pz[1] * du_j_qp[1 + s * NDIM] + ULL_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[1] * w0_pz[1] * w1_pz[0] * w2_pz[0] *
+                        (ULL_pz[0] * dv_j_qp[s * NDIM] + ULL_pz[1] * dv_j_qp[1 + s * NDIM] + ULL_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[2] * w0_pz[1] * w1_pz[0] * w2_pz[0] *
+                        (ULL_pz[0] * dw_j_qp[s * NDIM] + ULL_pz[1] * dw_j_qp[1 + s * NDIM] + ULL_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_upper_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[0] * w0_pz[1] * w1_pz[0] * w2_pz[1] *
+                        (ULU_pz[0] * du_j_qp[s * NDIM] + ULU_pz[1] * du_j_qp[1 + s * NDIM] + ULU_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[1] * w0_pz[1] * w1_pz[0] * w2_pz[1] *
+                        (ULU_pz[0] * dv_j_qp[s * NDIM] + ULU_pz[1] * dv_j_qp[1 + s * NDIM] + ULU_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[2] * w0_pz[1] * w1_pz[0] * w2_pz[1] *
+                        (ULU_pz[0] * dw_j_qp[s * NDIM] + ULU_pz[1] * dw_j_qp[1 + s * NDIM] + ULU_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_upper_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[0] * w0_pz[1] * w1_pz[1] * w2_pz[0] *
+                        (UUL_pz[0] * du_j_qp[s * NDIM] + UUL_pz[1] * du_j_qp[1 + s * NDIM] + UUL_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[1] * w0_pz[1] * w1_pz[1] * w2_pz[0] *
+                        (UUL_pz[0] * dv_j_qp[s * NDIM] + UUL_pz[1] * dv_j_qp[1 + s * NDIM] + UUL_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[2] * w0_pz[1] * w1_pz[1] * w2_pz[0] *
+                        (UUL_pz[0] * dw_j_qp[s * NDIM] + UUL_pz[1] * dw_j_qp[1 + s * NDIM] + UUL_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_lower_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[0] * w0_pz[0] * w1_pz[1] * w2_pz[0] *
+                        (LUL_pz[0] * du_j_qp[s * NDIM] + LUL_pz[1] * du_j_qp[1 + s * NDIM] + LUL_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[1] * w0_pz[0] * w1_pz[1] * w2_pz[0] *
+                        (LUL_pz[0] * dv_j_qp[s * NDIM] + LUL_pz[1] * dv_j_qp[1 + s * NDIM] + LUL_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_lower_pz[2]] =
+                        dx[2] * w0_pz[0] * w1_pz[1] * w2_pz[0] *
+                        (LUL_pz[0] * dw_j_qp[s * NDIM] + LUL_pz[1] * dw_j_qp[1 + s * NDIM] + LUL_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_lower_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[0] * w0_pz[0] * w1_pz[1] * w2_pz[1] *
+                        (LUU_pz[0] * du_j_qp[s * NDIM] + LUU_pz[1] * du_j_qp[1 + s * NDIM] + LUU_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[1] * w0_pz[0] * w1_pz[1] * w2_pz[1] *
+                        (LUU_pz[0] * dv_j_qp[s * NDIM] + LUU_pz[1] * dv_j_qp[1 + s * NDIM] + LUU_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[2] * w0_pz[0] * w1_pz[1] * w2_pz[1] *
+                        (LUU_pz[0] * dw_j_qp[s * NDIM] + LUU_pz[1] * dw_j_qp[1 + s * NDIM] + LUU_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_lower_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[0] * w0_pz[0] * w1_pz[0] * w2_pz[1] *
+                        (LLU_pz[0] * du_j_qp[s * NDIM] + LLU_pz[1] * du_j_qp[1 + s * NDIM] + LLU_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[1] * w0_pz[0] * w1_pz[0] * w2_pz[1] *
+                        (LLU_pz[0] * dv_j_qp[s * NDIM] + LLU_pz[1] * dv_j_qp[1 + s * NDIM] + LLU_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_lower_pz[0]][ic_trimmed_lower_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[2] * w0_pz[0] * w1_pz[0] * w2_pz[1] *
+                        (LLU_pz[0] * dw_j_qp[s * NDIM] + LLU_pz[1] * dw_j_qp[1 + s * NDIM] + LLU_pz[2] * dw_j_qp[2 + s * NDIM]);
+
+                    ujumppz[ic_trimmed_upper_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[0] * w0_pz[1] * w1_pz[1] * w2_pz[1] *
+                        (UUU_pz[0] * du_j_qp[s * NDIM] + UUU_pz[1] * du_j_qp[1 + s * NDIM] + UUU_pz[2] * du_j_qp[2 + s * NDIM]);
+                    vjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[1] * w0_pz[1] * w1_pz[1] * w2_pz[1] *
+                        (UUU_pz[0] * dv_j_qp[s * NDIM] + UUU_pz[1] * dv_j_qp[1 + s * NDIM] + UUU_pz[2] * dv_j_qp[2 + s * NDIM]);
+                    wjumppz[ic_trimmed_upper_pz[0]][ic_trimmed_upper_pz[1]][ic_trimmed_upper_pz[2]] =
+                        dx[2] * w0_pz[1] * w1_pz[1] * w2_pz[1] *
+                        (UUU_pz[0] * dw_j_qp[s * NDIM] + UUU_pz[1] * dw_j_qp[1 + s * NDIM] + UUU_pz[2] * dw_j_qp[2 + s * NDIM]);
+                        
+                        
+                        
 #endif
-
-
 
 
                     for (int d = 0; d < u_depth; ++d)
@@ -4391,17 +4776,18 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                              
 									if (d_modify_vel_interp_jumps)
 									{
-										 if (axis == 0  && (N_qp[s * NDIM]*wr0_px[ic_upper_px[0] - ic0] + N_qp[s * NDIM + 1]*wr1_px[ic_upper_px[1] - ic1])>0)
+										 if (axis == 0  && (N_qp[s * NDIM]*wr0_px[ic_upper_px[0] - ic0] + N_qp[s * NDIM + 1]*wr1_px[ic_upper_px[1] - ic1])<0)
 										{
 												CC_px = ujumppx[ic0][ic1];
 										}
-										 else if (axis == 1 && (N_qp[s * NDIM]*wr0_px[ic_upper_px[0] - ic0] + N_qp[s * NDIM + 1]*wr1_px[ic_upper_px[1] - ic1])>0)
+										 else if (axis == 1 && (N_qp[s * NDIM]*wr0_px[ic_upper_px[0] - ic0] + N_qp[s * NDIM + 1]*wr1_px[ic_upper_px[1] - ic1])<0)
 										{
 												CC_px = vjumppx[ic0][ic1];	
 										}
 						
-										Q_data_axis_px[s] -= CC_px /d_mu;
+										Q_data_axis_px[s] += CC_px /d_mu;
 									}
+									
                                 }
                             }       
                             for (int ic1 = ic_trimmed_lower_py[1]; ic1 <= ic_trimmed_upper_py[1]; ++ic1)
@@ -4417,17 +4803,17 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                                                                     
 									if (d_modify_vel_interp_jumps)
 									{
-										if (axis == 0  && (N_qp[s * NDIM]*wr0_py[ic_upper_py[0] - ic0] + N_qp[s * NDIM + 1]*wr1_py[ic_upper_py[1] - ic1])>0)
+										if (axis == 0  && (N_qp[s * NDIM]*wr0_py[ic_upper_py[0] - ic0] + N_qp[s * NDIM + 1]*wr1_py[ic_upper_py[1] - ic1])<0)
 										{
 												CC_py = ujumppy[ic0][ic1];
 										}
-										 else if (axis == 1 && (N_qp[s * NDIM]*wr0_py[ic_upper_py[0] - ic0] + N_qp[s * NDIM + 1]*wr1_py[ic_upper_py[1] - ic1])>0)
+										 else if (axis == 1 && (N_qp[s * NDIM]*wr0_py[ic_upper_py[0] - ic0] + N_qp[s * NDIM + 1]*wr1_py[ic_upper_py[1] - ic1])<0)
 										{
 												CC_py = vjumppy[ic0][ic1];	
 										}
 									
 						
-										Q_data_axis_py[s] -= CC_py /d_mu;
+										Q_data_axis_py[s] += CC_py /d_mu;
 									}
                                 }
                             }
@@ -4452,6 +4838,33 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                         Q_data_axis_px[s] += w0_px[ic0 - ic_lower_px[0]] * w1_px[ic1 - ic_lower_px[1]] *
                                                              w2_px[ic2 - ic_lower_px[2]] *
                                                              u_sc_data_array[ic0][ic1][ic2][d];
+                                                             
+                                                             
+                                                             
+                                        double CC_px = 0.0;                    
+																 
+										if (d_modify_vel_interp_jumps)
+										{
+											double nproj = N_qp[s * NDIM]*wr0_px[ic_upper_px[0] - ic0] + N_qp[s * NDIM + 1]*wr1_px[ic_upper_px[1] - ic1] + N_qp[s * NDIM + 2]*wr2_px[ic_upper_px[2] - ic2];
+											 if (axis == 0  && nproj < 0.0)
+											{
+													CC_px = ujumppx[ic0][ic1][ic2];
+											}
+											 else if (axis == 1 && nproj < 0.0)
+											{
+													CC_px = vjumppx[ic0][ic1][ic2];	
+											}
+											else if (axis == 2 && nproj < 0.0)
+											{
+													CC_px = wjumppx[ic0][ic1][ic2];	
+											}
+							
+											Q_data_axis_px[s] += CC_px /d_mu;
+										}
+										
+									
+									
+									
                                     }
                                 }
                             }
@@ -4469,6 +4882,27 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                         Q_data_axis_py[s] += w0_py[ic0 - ic_lower_py[0]] * w1_py[ic1 - ic_lower_py[1]] *
                                                              w2_py[ic2 - ic_lower_py[2]] *
                                                              u_sc_data_array[ic0][ic1][ic2][d];
+                                      
+                                         double CC_py = 0.0;                     
+                                         if (d_modify_vel_interp_jumps)
+										{
+											double nproj = N_qp[s * NDIM]*wr0_py[ic_upper_py[0] - ic0] + N_qp[s * NDIM + 1]*wr1_py[ic_upper_py[1] - ic1] + N_qp[s * NDIM + 2]*wr2_py[ic_upper_py[2] - ic2];
+											 if (axis == 0  && nproj < 0.0)
+											{
+													CC_py = ujumppy[ic0][ic1][ic2];
+											}
+											 else if (axis == 1 && nproj < 0.0)
+											{
+													CC_py = vjumppy[ic0][ic1][ic2];	
+											}
+											else if (axis == 2 && nproj < 0.0)
+											{
+													CC_py = wjumppy[ic0][ic1][ic2];	
+											}
+							
+											Q_data_axis_py[s] += CC_py /d_mu;
+										}
+								
                                     }
                                 }
                             }
@@ -4485,6 +4919,29 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                         Q_data_axis_pz[s] += w0_pz[ic0 - ic_lower_pz[0]] * w1_pz[ic1 - ic_lower_pz[1]] *
                                                               w2_pz[ic2 - ic_lower_pz[2]] *
                                                               u_sc_data_array[ic0][ic1][ic2][d];
+                                                              
+                                                              
+                                                   
+                                         double CC_pz = 0.0;                     
+                                         if (d_modify_vel_interp_jumps)
+										{
+											double nproj = N_qp[s * NDIM]*wr0_pz[ic_upper_pz[0] - ic0] + N_qp[s * NDIM + 1]*wr1_pz[ic_upper_pz[1] - ic1] + N_qp[s * NDIM + 2]*wr2_pz[ic_upper_pz[2] - ic2];
+											 if (axis == 0  && nproj < 0.0)
+											{
+													CC_pz = ujumppz[ic0][ic1][ic2];
+											}
+											 else if (axis == 1 && nproj < 0.0)
+											{
+													CC_pz = vjumppz[ic0][ic1][ic2];	
+											}
+											else if (axis == 2 && nproj < 0.0)
+											{
+													CC_pz = wjumppz[ic0][ic1][ic2];	
+											}
+							
+											Q_data_axis_pz[s] += CC_pz /d_mu;
+										}
+										
                                     }
                                 }
                             }
@@ -4502,12 +4959,12 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                 if (d_modify_vel_interp_jumps)
                                 {
                                     if (axis == 0 && (N_qp[s * NDIM] * wr0[ic_upper[0] - ic0] +
-                                                      N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1]) > 0)
+                                                      N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1]) < 0)
                                     {
                                         CC = ujump[ic0][ic1];
                                     }
                                     else if (axis == 1 && (N_qp[s * NDIM] * wr0[ic_upper[0] - ic0] +
-                                                           N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1]) > 0)
+                                                           N_qp[s * NDIM + 1] * wr1[ic_upper[1] - ic1]) < 0)
                                     {
                                         CC = vjump[ic0][ic1];
                                     }
@@ -4517,7 +4974,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                                                       u_sc_data_array[ic0][ic1][d];
                                 if (d_modify_vel_interp_jumps)
                                 {
-                                    Q_data_axis[s] -= CC / d_mu;
+                                    Q_data_axis[s] += CC / d_mu;
                                 }
                             }
                         }
@@ -4539,11 +4996,11 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                         {
                                             CC = ujump[ic0][ic1][ic2];
                                         }
-                                        else if (axis == 1 && nproj > 0)
+                                        else if (axis == 1 && nproj < 0)
                                         {
                                             CC = vjump[ic0][ic1][ic2];
                                         }
-                                        else if (axis == 2 && nproj > 0)
+                                        else if (axis == 2 && nproj < 0)
                                         {
                                             CC = wjump[ic0][ic1][ic2];
                                         }
@@ -4554,7 +5011,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                                                                           u_sc_data_array[ic0][ic1][ic2][d];
                                     if (d_modify_vel_interp_jumps)
                                     {
-                                        Q_data_axis[s] -= CC / d_mu;
+                                        Q_data_axis[s] += CC / d_mu;
                                     }
                                 }
                             }
@@ -4566,6 +5023,12 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 
                 }
  
+ 
+			//	 LEInteractor::interpolate(U_qp_px, NDIM, X_qp_px, NDIM, u_sc_data, patch, ghost_box, d_default_interp_spec.kernel_fcn);
+			//	 LEInteractor::interpolate(U_qp_py, NDIM, X_qp_py, NDIM, u_sc_data, patch, ghost_box, d_default_interp_spec.kernel_fcn);
+//~ #if (NDIM == 3)	
+			//	 LEInteractor::interpolate(U_qp_pz, NDIM, X_qp_pz, NDIM, u_sc_data, patch, ghost_box, d_default_interp_spec.kernel_fcn); 
+//~ #endif			 
                                                 for (unsigned int k = 0; k < nindices; ++k)
                                                 {
                                                     U_qp[NDIM * local_indices[k] + axis] = Q_data_axis[local_indices[k]];    
@@ -4579,10 +5042,6 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 #endif
                                                 }
 
-            }
-            
-            
-            
                 for (unsigned int k = 0; k < nindices; ++k)
                 {
 					du_o_qp[NDIM * local_indices[k]] = (1.0 / dx[0]) * (n(0) > 0.0 ? 1.0 : -1.0) * (U_qp_px[NDIM * local_indices[k]] - U_qp[NDIM * local_indices[k]]);
@@ -4605,10 +5064,7 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
 #endif
 
                 }
-            
-            
-            
-            
+            }
         }
         
   
@@ -4631,22 +5087,12 @@ IBFEMethod::ComputeVorticityForTraction(const int u_data_idx, const double data_
                 qrule, IBFEMethod::getDefaultInterpSpec(), elem, X_node, patch_dx_min);
             if (qrule_changed)
             {
-                // NOTE: Because we are only using the shape function values for
-                // the FE object associated with X, we only need to reinitialize
-                // X_fe whenever the quadrature rule changes.  In particular,
-                // notice that the shape function values depend only on the
-                // element type and quadrature rule, not on the element
-                // geometry.
                 //~ U_fe->attach_quadrature_rule(qrule.get());
                 X_fe->attach_quadrature_rule(qrule.get());
                 //~ if (X_fe != U_fe) X_fe->reinit(elem);
             }
             //~ U_fe->reinit(elem);
-            
- 		
-				
-				
-				
+            	
             
             for (unsigned int i = 0; i < NDIM; ++i)
 			{
@@ -4764,6 +5210,34 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
                                 const std::vector<Pointer<RefineSchedule<NDIM> > >& u_ghost_fill_scheds,
                                 const double data_time)
 {
+	
+	
+	
+	const int coarsest_ln = 0;
+    const int finest_ln = d_hierarchy->getFinestLevelNumber();														
+	for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
+    {
+			const Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);													
+			if (!level->checkAllocated(side_mask_scratch_idx)) level->allocatePatchData(side_mask_scratch_idx);
+	}
+
+	HierarchySideDataOpsReal<NDIM, double> hier_sc_data_ops(d_hierarchy, coarsest_ln, finest_ln);       
+	hier_sc_data_ops.copyData(side_mask_scratch_idx, u_data_idx, /*interior only*/ false);
+	 
+        
+    for (unsigned int part = 0; part < d_num_parts; ++part)
+	{
+                                                           
+
+		const int finest_ln = d_hierarchy->getFinestLevelNumber();
+		RefineAlgorithm<NDIM> ghost_fill_alg;
+		ghost_fill_alg.registerRefine(side_mask_scratch_idx, side_mask_scratch_idx, side_mask_scratch_idx, NULL);
+		Pointer<RefineSchedule<NDIM> > ghost_fill_schd =
+					ghost_fill_alg.createSchedule(d_hierarchy->getPatchLevel(finest_ln));
+
+		ghost_fill_schd->fillData(data_time);
+		
+	}
 	
 	
 	
@@ -4986,12 +5460,6 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 		VectorValue<double> tau1, tau2, n;
 		
 		
-		
-		
-		
-
-		
-		
         
         int local_patch_num = 0;
 		for (PatchLevel<NDIM>::Iterator p(level); p; p++, ++local_patch_num)
@@ -5022,7 +5490,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 			
 			const double dh = d_vel_interp_width * sqrt(diag_dis);
             
-            const int u_ghost_num = static_cast<double>(ceil(dh/patch_dx_min));
+            const int u_ghost_num = static_cast<int>(ceil(dh/patch_dx_min));
             
             
             for (unsigned int d = 0; d < NDIM; ++d)
@@ -5094,17 +5562,9 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 				get_values_for_interpolation(dw_j_node, *dw_j_petsc_vec, dw_j_local_soln, dw_j_dof_indices); 
 #endif 
 				const bool qrule_changed = FEDataManager::updateInterpQuadratureRule(qrule, IBFEMethod::getDefaultInterpSpec(), elem, X_node, patch_dx_min);
-				if (qrule_changed)
-				{
-					// NOTE: Because we are only using the shape function values for
-					// the FE object associated with X, we only need to reinitialize
-					// X_fe whenever the quadrature rule changes.  In particular,
-					// notice that the shape function values depend only on the
-					// element type and quadrature rule, not on the element
-					// geometry.
-					X_fe->attach_quadrature_rule(qrule.get());
-					X_fe->reinit(elem);
-				}
+				if (qrule_changed) X_fe->attach_quadrature_rule(qrule.get());
+					
+				X_fe->reinit(elem);
 				const unsigned int n_node = elem->n_nodes();
 				const unsigned int n_qp = qrule->n_points();
 				
@@ -5128,7 +5588,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 #endif 
 				double* N_begin = &N_qp[NDIM * qp_offset];
                 std::fill(N_begin, N_begin + NDIM * n_qp, 0.0);
-							//~ 
+
 				// Interpolate X, du, and dv at all of the quadrature points
 				// via accumulation, i.e., X(qp) = sum_k X_k * phi_k(qp) for
 				// each qp.
@@ -5181,7 +5641,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 			      
 
 			
-			Pointer<SideData<NDIM, double> >  u_sc_data = patch->getPatchData(u_data_idx);
+			Pointer<SideData<NDIM, double> >  u_sc_data = patch->getPatchData(side_mask_scratch_idx);
 			
             const IntVector<NDIM>& u_gcw = u_sc_data->getGhostCellWidth();
             const Box<NDIM> ghost_box = Box<NDIM>::grow(patch->getBox(), IntVector<NDIM>(u_ghost_num));
@@ -5249,19 +5709,15 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 					const int local_sz = (*std::max_element(local_indices.begin(), local_indices.end())) + 1;
 					std::vector<double> Q_data_axis(local_sz);
 					std::vector<double> Q_data_axis_p(local_sz), Q_data_axis_m(local_sz);
-
                     x_lower_axis[0] = x_lower_axis[1] = x_upper_axis[0] = x_upper_axis[1] = 0.0;
                     x_lower_axis_pm[0] = x_lower_axis_pm[1] = x_upper_axis_pm[0] = x_upper_axis_pm[1] = 0.0;
-
-
 #if (NDIM == 3)
 					x_lower_axis[2] = x_upper_axis[2] = 0.0;
 					x_lower_axis_pm[2] = x_upper_axis_pm[2] = 0.0;
 
 #endif
-					
 					Box<NDIM> side_boxes[NDIM];
-					
+
 					Box<NDIM> side_boxes_pm[NDIM];
 					
 
@@ -5377,106 +5833,61 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 												ic_upper_m[d] = ic_center_m[d] + 1;
 											}
 											ic_trimmed_lower_m[d] = std::max(ic_lower_m[d], ilower_pm[d] - u_gcw[d]);
-                                                                                        ic_trimmed_upper_m[d] =
-                                                                                            std::min(ic_upper_m[d],
-                                                                                                     iupper_pm[d] +
-                                                                                                         u_gcw[d]);
+                                            ic_trimmed_upper_m[d] = std::min(ic_upper_m[d], iupper_pm[d] + u_gcw[d]);
    
                                       }
 
                                      if (X_shifted[0] <= X_cell[0])
-                                                                        {
 									   w0[0] = (X_cell[0]-X_shifted[0])/dx[0];
-									   wr0[0] = w0[0]; 
-									   w0[1] = 1.0 - w0[0];
-									   wr0[1] = -w0[1];
-									}
 									else
-									{
 									   w0[0] = 1.0 + (X_cell[0]-X_shifted[0])/dx[0];
-									   wr0[0] = w0[0];
-									   w0[1] = 1.0 - w0[0]; 
-									   wr0[1] = -w0[1];
-									}
+									wr0[0] = w0[0];
+									w0[1] = 1.0 - w0[0]; 
+									wr0[1] = -w0[1];
+
 									
 									
 									if ( X_shifted[1] <= X_cell[1] )
-									{
 									   w1[0] = (X_cell[1]-X_shifted[1])/dx[1];
-									   wr1[0] = w1[0];
-									   w1[1] = 1.0 - w1[0];
-									   wr1[1] = -w1[1];
-									}
 									else
-									{
 									   w1[0] = 1.0 + (X_cell[1]-X_shifted[1])/dx[1];
-									   wr1[0] = w1[0];
-									   w1[1] = 1.0 - w1[0];
-									   wr1[1] = - w1[1];
-									}
+									wr1[0] = w1[0];
+									w1[1] = 1.0 - w1[0];
+									wr1[1] = - w1[1];
 #if (NDIM == 3)
 									if ( X_shifted[2] <= X_cell[2] )
-									{
 									   w2[0] = (X_cell[2]-X_shifted[2])/dx[2];
-									   wr2[0] = w2[0];
-									   w2[1] = 1.0 - w2[0];
-									   wr2[1] = -w2[1];
-									}
 									else
-									{
 									   w2[0] = 1.0 + (X_cell[2]-X_shifted[2])/dx[2];
-									   wr2[0] = w2[0];
-									   w2[1] = 1.0 - w2[0];
-									   wr2[1] = - w2[1];
-									}
+									wr2[0] = w2[0];
+									w2[1] = 1.0 - w2[0];
+									wr2[1] = - w2[1];
 #endif
 
-							   if (X_shifted_p[0] <= X_cell_p[0])
-								{
+							    if (X_shifted_p[0] <= X_cell_p[0])
 									w0_p[0] = (X_cell_p[0] - X_shifted_p[0]) / dx[0];
-
-									w0_p[1] = 1.0 - w0_p[0];
-								}
 								else
-								{
 									w0_p[0] = 1.0 + (X_cell_p[0] - X_shifted_p[0]) / dx[0];
-									w0_p[1] = 1.0 - w0_p[0];
-								}
+								w0_p[1] = 1.0 - w0_p[0];
 
 								if (X_shifted_m[0] <= X_cell_m[0])
-								{
 									w0_m[0] = (X_cell_m[0] - X_shifted_m[0]) / dx[0];
-
-									w0_m[1] = 1.0 - w0_m[0];
-								}
 								else
-								{
 									w0_m[0] = 1.0 + (X_cell_m[0] - X_shifted_m[0]) / dx[0];
-                                    w0_m[1] = 1.0 - w0_m[0];
-                                }
+                                w0_m[1] = 1.0 - w0_m[0];
 
                                 if (X_shifted_p[1] <= X_cell_p[1])
-                                {
                                     w1_p[0] = (X_cell_p[1] - X_shifted_p[1]) / dx[1];
-                                    w1_p[1] = 1.0 - w1_p[0];
-                                }
                                 else
-								{
                                     w1_p[0] = 1.0 + (X_cell_p[1] - X_shifted_p[1]) / dx[1];
-                                    w1_p[1] = 1.0 - w1_p[0];
-                                }
-
+                                w1_p[1] = 1.0 - w1_p[0];
+                                    
                                 if (X_shifted_m[1] <= X_cell_m[1])
-                                {
 									w1_m[0] = (X_cell_m[1] - X_shifted_m[1]) / dx[1];
-                                    w1_m[1] = 1.0 - w1_m[0];
-                                }
-                                                                else
-                                                                {
-                                                                    w1_m[0] =
-                                                                        1.0 + (X_cell_m[1] - X_shifted_m[1]) / dx[1];
-                                                                    w1_m[1] = 1.0 - w1_m[0];
-                                                                }
+                                else
+                                    w1_m[0] = 1.0 + (X_cell_m[1] - X_shifted_m[1]) / dx[1];
+                                w1_m[1] = 1.0 - w1_m[0];
+
 #if (NDIM == 3)
 
                                                                 if (X_shifted_p[2] <= X_cell_p[2])
@@ -5504,8 +5915,6 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
                                                                 }
 
 #endif
-
-
 
                                                                 boost::multi_array<double, NDIM> ujump(
                                                                     boost::extents[range(ic_trimmed_lower[0],
@@ -5776,12 +6185,6 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 				const bool qrule_changed = FEDataManager::updateInterpQuadratureRule(qrule, IBFEMethod::getDefaultInterpSpec(), elem, X_node, patch_dx_min);
 				if (qrule_changed)
 				{
-					// NOTE: Because we are only using the shape function values for
-					// the FE object associated with X, we only need to reinitialize
-					// X_fe whenever the quadrature rule changes.  In particular,
-					// notice that the shape function values depend only on the
-					// element type and quadrature rule, not on the element
-					// geometry.
 					U_fe->attach_quadrature_rule(qrule.get());
 					X_fe->attach_quadrature_rule(qrule.get());
 					if (X_fe != U_fe) X_fe->reinit(elem);
@@ -5864,12 +6267,45 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
 	}
 	
 	
+	 VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
+	 
+	  const int p_data_idx = var_db->mapVariableAndContextToIndex(getINSHierarchyIntegrator()->getPressureVariable(),
+                                                           getINSHierarchyIntegrator()->getScratchContext());
+                                                  
+			
+	//const int coarsest_ln = 0;
+  //  const int finest_ln = d_hierarchy->getFinestLevelNumber();														
+	for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
+    {
+			const Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);													
+			if (!level->checkAllocated(mask_scratch_idx)) level->allocatePatchData(mask_scratch_idx);
+	}
+
+	HierarchyCellDataOpsReal<NDIM, double> hier_cc_data_ops(d_hierarchy, coarsest_ln, finest_ln);       
+	hier_cc_data_ops.copyData(mask_scratch_idx, p_data_idx, /*interior only*/ false);
+	 
+        
+       for (unsigned int part = 0; part < d_num_parts; ++part)
+		{
+                                                           
+
+			const int finest_ln = d_hierarchy->getFinestLevelNumber();
+			RefineAlgorithm<NDIM> ghost_fill_alg;
+			ghost_fill_alg.registerRefine(mask_scratch_idx, mask_scratch_idx, mask_scratch_idx, NULL);
+			Pointer<RefineSchedule<NDIM> > ghost_fill_schd =
+					ghost_fill_alg.createSchedule(d_hierarchy->getPatchLevel(finest_ln));
+
+			ghost_fill_schd->fillData(data_time);
+			
+			
+			interpolatePressureForTraction(mask_scratch_idx, data_time, part);
+		}
+
 
 
     return;
 
 } // interpolateVelocity
-
 
 void
 IBFEMethod::forwardEulerStep(const double current_time, const double new_time)
@@ -6591,7 +7027,7 @@ IBFEMethod::initializeFEData()
 void
 IBFEMethod::registerEulerianVariables()
 {
-    const IntVector<NDIM> ghosts = 6;
+    const IntVector<NDIM> ghosts = 7;
     mask_var = new CellVariable<NDIM, double>(d_object_name + "::mask");
     registerVariable(mask_current_idx,
                      mask_new_idx,
@@ -6600,25 +7036,22 @@ IBFEMethod::registerEulerianVariables()
                      ghosts,
                      "CONSERVATIVE_COARSEN",
                      "CONSERVATIVE_LINEAR_REFINE");
-    return;
-} // registerEulerianCellVariables
-
-/*
-void
-IBFEMethod::registerEulerianSideVariables()
-{
-    const IntVector<NDIM> side_ghosts = 6;
-    side_mask_var = new SideVariable<NDIM, double>(d_object_name + "::sidemask");
+                     
+    side_mask_var = new SideVariable<NDIM, double>(d_object_name + "::side_mask");
     registerVariable(side_mask_current_idx,
                      side_mask_new_idx,
                      side_mask_scratch_idx,
                      side_mask_var,
-                     side_ghosts,
+                     ghosts,
                      "CONSERVATIVE_COARSEN",
                      "CONSERVATIVE_LINEAR_REFINE");
+                     
+                     
     return;
-} // registerEulerianCellVariables
-*/
+} // registerEulerianVariables
+
+
+
 
 void
 IBFEMethod::initializePatchHierarchy(Pointer<PatchHierarchy<NDIM> > hierarchy,
