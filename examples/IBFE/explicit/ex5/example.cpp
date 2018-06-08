@@ -433,8 +433,8 @@ run_example(int argc, char* argv[])
         if (SAMRAI_MPI::getRank() == 0)
         {
             
-            drag_stream.open("/Users/AminKolah/sandbox/Flow-past-cylinder-sphere/2D/CD_testing_merge_average_traction_subdivision.curve", ios_base::out | ios_base::trunc);
-            lift_stream.open("/Users/AminKolah/sandbox/Flow-past-cylinder-sphere/2D/CL_testing_merge_average_traction_subdivision.curve", ios_base::out | ios_base::trunc);
+            drag_stream.open("CD_II.curve", ios_base::out | ios_base::trunc);
+            lift_stream.open("CL_II.curve", ios_base::out | ios_base::trunc);
             
             /*
              drag_stream.open("/Users/AminKolah/sandbox/Flow-past-cylinder-sphere/2D/CD_traction_o_P_" + std::to_string(int(mfac)) +"_P1_kappa_" + std::to_string(int(kappa_s)) +"_eta_" + std::to_string((eta_s)) +".curve", ios_base::out | ios_base::trunc);
