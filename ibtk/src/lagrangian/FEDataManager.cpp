@@ -590,11 +590,37 @@ FEDataManager::spread(const int f_data_idx,
     TBOX_ASSERT(cc_data || sc_data);
 
     // Make a copy of the Eulerian data.
-    const int f_copy_data_idx = var_db->registerClonedPatchDataIndex(f_var, f_data_idx);
+    //
+    // TODO: We should remove these cloned indices when we are done with them!
+    int depth;
+    if (cc_data)
+    {
+        Pointer<CellDataFactory<NDIM, double> > f_cc_fac = f_cc_var->getPatchDataFactory();
+        depth = f_cc_fac->getDefaultDepth();
+    }
+    if (sc_data)
+    {
+        Pointer<SideDataFactory<NDIM, double> > f_sc_fac = f_sc_var->getPatchDataFactory();
+        depth = f_sc_fac->getDefaultDepth();
+    }
+    using key_type = std::tuple<int, int>;
+    const key_type f_key{ cc_data ? 0 : 1, depth };
+    static std::map<key_type, int> f_copy_data_idx_map;
+    int f_copy_data_idx = -1;
+    auto it = f_copy_data_idx_map.find(f_key);
+    if (it == f_copy_data_idx_map.end())
+    {
+        f_copy_data_idx = var_db->registerClonedPatchDataIndex(f_var, f_data_idx);
+        f_copy_data_idx_map[f_key] = f_copy_data_idx;
+    }
+    else
+    {
+        f_copy_data_idx = it->second;
+    }
     for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
     {
         Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
-        level->allocatePatchData(f_copy_data_idx);
+        if (!level->checkAllocated(f_copy_data_idx)) level->allocatePatchData(f_copy_data_idx);
     }
     Pointer<HierarchyDataOpsReal<NDIM, double> > f_data_ops =
         HierarchyDataOpsManager<NDIM>::getManager()->getOperationsDouble(f_var, d_hierarchy, true);
@@ -930,12 +956,6 @@ FEDataManager::spread(const int f_data_idx,
     // Accumulate data.
     f_data_ops->swapData(f_copy_data_idx, f_data_idx);
     f_data_ops->add(f_data_idx, f_data_idx, f_copy_data_idx);
-    for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
-    {
-        Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
-        level->deallocatePatchData(f_copy_data_idx);
-    }
-    var_db->removePatchDataIndex(f_copy_data_idx);
 
     IBTK_TIMER_STOP(t_spread);
     return;
