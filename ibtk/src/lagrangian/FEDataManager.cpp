@@ -616,8 +616,8 @@ FEDataManager::spread(const int f_data_idx,
     System& X_system = d_es->get_system(COORDINATES_SYSTEM_NAME);
     const DofMap& X_dof_map = X_system.get_dof_map();
     SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
-    std::vector<std::vector<unsigned int> > F_dof_indices(n_vars);
-    std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+    std::vector<const std::vector<unsigned int>*> F_dof_indices(n_vars);
+    std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
     FEType F_fe_type = F_dof_map.variable_type(0);
     Order F_order = F_dof_map.variable_order(0);
     for (unsigned i = 0; i < n_vars; ++i)
@@ -799,7 +799,11 @@ FEDataManager::spread(const int f_data_idx,
                 Elem* const elem = patch_elems[e_idx];
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_map_cache.build_dof_indices(elem, d);
+                }
+                for (unsigned int d = 0; d < NDIM; ++d)
+                {
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type key = getQuadratureKey(spread_spec.quad_type,
@@ -826,12 +830,16 @@ FEDataManager::spread(const int f_data_idx,
                 Elem* const elem = patch_elems[e_idx];
                 for (unsigned int i = 0; i < n_vars; ++i)
                 {
-                    F_dof_map_cache.dof_indices(elem, F_dof_indices[i], i);
+                    F_dof_map_cache.build_dof_indices(elem, i);
+                }
+                for (unsigned int i = 0; i < n_vars; ++i)
+                {
+                    F_dof_indices[i] = F_dof_map_cache.lookup_dof_indices(elem, i);
                 }
                 get_values_for_interpolation(F_node, *F_petsc_vec, F_local_soln, F_dof_indices);
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type &key = quad_keys[e_idx];
@@ -865,7 +873,7 @@ FEDataManager::spread(const int f_data_idx,
                 double* X_begin = &X_qp[NDIM * qp_offset];
                 std::fill(F_begin, F_begin + n_vars * n_qp, 0.0);
                 std::fill(X_begin, X_begin + NDIM * n_qp, 0.0);
-                for (unsigned int k = 0; k < F_dof_indices[0].size(); ++k)
+                for (unsigned int k = 0; k < F_dof_indices[0]->size(); ++k)
                 {
                     for (unsigned int qp = 0; qp < n_qp; ++qp)
                     {
@@ -875,7 +883,7 @@ FEDataManager::spread(const int f_data_idx,
                         }
                     }
                 }
-                for (unsigned int k = 0; k < X_dof_indices[0].size(); ++k)
+                for (unsigned int k = 0; k < X_dof_indices[0]->size(); ++k)
                 {
                     for (unsigned int qp = 0; qp < n_qp; ++qp)
                     {
@@ -972,8 +980,8 @@ FEDataManager::prolongData(const int f_data_idx,
     System& X_system = d_es->get_system(system_name);
     const DofMap& X_dof_map = X_system.get_dof_map();
     SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
-    std::vector<std::vector<unsigned int> > F_dof_indices(n_vars);
-    std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+    std::vector<const std::vector<unsigned int>*> F_dof_indices(n_vars);
+    std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
     FEType F_fe_type = F_dof_map.variable_type(0);
     for (unsigned i = 0; i < n_vars; ++i)
     {
@@ -1048,7 +1056,11 @@ FEDataManager::prolongData(const int f_data_idx,
             const unsigned int n_node = elem->n_nodes();
             for (unsigned int d = 0; d < NDIM; ++d)
             {
-                X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                X_dof_map_cache.build_dof_indices(elem, d);
+            }
+            for (unsigned int d = 0; d < NDIM; ++d)
+            {
+                X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
             }
 
             // Cache the nodal and physical coordinates of the element,
@@ -1065,7 +1077,7 @@ FEDataManager::prolongData(const int f_data_idx,
                 libMesh::Point& X = X_node_cache[k];
                 for (int d = 0; d < NDIM; ++d)
                 {
-                    X(d) = X_vec(X_dof_indices[d][k]);
+                    X(d) = X_vec((*X_dof_indices[d])[k]);
                     X_min[d] = std::min(X_min[d], X(d));
                     X_max[d] = std::max(X_max[d], X(d));
                 }
@@ -1121,7 +1133,11 @@ FEDataManager::prolongData(const int f_data_idx,
             // update the data on the grid.
             for (unsigned int i = 0; i < n_vars; ++i)
             {
-                F_dof_map_cache.dof_indices(elem, F_dof_indices[i], i);
+                F_dof_map_cache.build_dof_indices(elem, i);
+            }
+            for (unsigned int i = 0; i < n_vars; ++i)
+            {
+                F_dof_indices[i] = F_dof_map_cache.lookup_dof_indices(elem, i);
             }
             get_values_for_interpolation(F_node, *F_petsc_vec, F_local_soln, F_dof_indices);
             if (is_density) get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
@@ -1204,7 +1220,7 @@ FEDataManager::interpWeighted(const int f_data_idx,
     const DofMap& X_dof_map = X_system.get_dof_map();
     SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
     std::vector<std::vector<unsigned int> > F_dof_indices(n_vars);
-    std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+    std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
     FEType F_fe_type = F_dof_map.variable_type(0);
     Order F_order = F_dof_map.variable_order(0);
     for (unsigned i = 0; i < n_vars; ++i)
@@ -1387,7 +1403,11 @@ FEDataManager::interpWeighted(const int f_data_idx,
                 Elem* const elem = patch_elems[e_idx];
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_map_cache.build_dof_indices(elem, d);
+                }
+                for (unsigned int d = 0; d < NDIM; ++d)
+                {
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type key = getQuadratureKey(interp_spec.quad_type,
@@ -1415,7 +1435,7 @@ FEDataManager::interpWeighted(const int f_data_idx,
                 Elem* const elem = patch_elems[e_idx];
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type &key = quad_keys[e_idx];
@@ -1491,11 +1511,6 @@ FEDataManager::interpWeighted(const int f_data_idx,
                     F_dof_map_cache.dof_indices(elem, F_dof_indices[i], i);
                     F_rhs_e[i].resize(static_cast<int>(F_dof_indices[i].size()));
                 }
-                for (unsigned int d = 0; d < NDIM; ++d)
-                {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
-                }
-                get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type &key = quad_keys[e_idx];
                 FEBase &F_fe = F_fe_cache[key];
                 FEMap &fe_map = fe_map_cache[key];
@@ -1625,7 +1640,7 @@ FEDataManager::restrictData(const int f_data_idx,
     const DofMap& X_dof_map = X_system.get_dof_map();
     SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
     std::vector<std::vector<unsigned int> > F_dof_indices(n_vars);
-    std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+    std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
     FEType F_fe_type = F_dof_map.variable_type(0);
     for (unsigned i = 0; i < n_vars; ++i)
     {
@@ -1700,7 +1715,11 @@ FEDataManager::restrictData(const int f_data_idx,
             const unsigned int n_node = elem->n_nodes();
             for (unsigned int d = 0; d < NDIM; ++d)
             {
-                X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                X_dof_map_cache.build_dof_indices(elem, d);
+            }
+            for (unsigned int d = 0; d < NDIM; ++d)
+            {
+                X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
             }
 
             // Cache the nodal and physical coordinates of the element,
@@ -1716,7 +1735,7 @@ FEDataManager::restrictData(const int f_data_idx,
                 s_node_cache[k] = elem->point(k);
                 for (int d = 0; d < NDIM; ++d)
                 {
-                    X_node_cache[k](d) = X_vec(X_dof_indices[d][k]);
+                    X_node_cache[k](d) = X_vec((*X_dof_indices[d])[k]);
                     X_min[d] = std::min(X_min[d], X_node_cache[k](d));
                     X_max[d] = std::max(X_max[d], X_node_cache[k](d));
                 }
@@ -2282,7 +2301,7 @@ FEDataManager::applyGradientDetector(const Pointer<BasePatchHierarchy<NDIM> > hi
         System& X_system = d_es->get_system(COORDINATES_SYSTEM_NAME);
         const DofMap& X_dof_map = X_system.get_dof_map();
         SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
-        std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+        std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
         FEType fe_type = X_dof_map.variable_type(0);
         for (unsigned d = 0; d < NDIM; ++d)
         {
@@ -2327,7 +2346,11 @@ FEDataManager::applyGradientDetector(const Pointer<BasePatchHierarchy<NDIM> > hi
                 Elem* const elem = patch_elems[e_idx];
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_map_cache.build_dof_indices(elem, d);
+                }
+                for (unsigned int d = 0; d < NDIM; ++d)
+                {
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
 
@@ -2501,7 +2524,7 @@ FEDataManager::updateQuadPointCountData(const int coarsest_ln, const int finest_
         System& X_system = d_es->get_system(COORDINATES_SYSTEM_NAME);
         const DofMap& X_dof_map = X_system.get_dof_map();
         SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
-        std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+        std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
         FEType fe_type = X_dof_map.variable_type(0);
         for (unsigned d = 0; d < NDIM; ++d)
         {
@@ -2542,7 +2565,11 @@ FEDataManager::updateQuadPointCountData(const int coarsest_ln, const int finest_
                 Elem* const elem = patch_elems[e_idx];
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_map_cache.build_dof_indices(elem, d);
+                }
+                for (unsigned int d = 0; d < NDIM; ++d)
+                {
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
 
@@ -2668,7 +2695,7 @@ FEDataManager::collectActivePatchElements(std::vector<std::vector<Elem*> >& acti
     System& X_system = d_es->get_system(COORDINATES_SYSTEM_NAME);
     const DofMap& X_dof_map = X_system.get_dof_map();
     SystemDofMapCache& X_dof_map_cache = *getDofMapCache(COORDINATES_SYSTEM_NAME);
-    std::vector<std::vector<unsigned int> > X_dof_indices(NDIM);
+    std::vector<const std::vector<unsigned int>*> X_dof_indices(NDIM);
     FEType fe_type = X_dof_map.variable_type(0);
     for (unsigned d = 0; d < NDIM; ++d)
     {
@@ -2777,7 +2804,11 @@ FEDataManager::collectActivePatchElements(std::vector<std::vector<Elem*> >& acti
                 Elem* const elem = *el_it;
                 for (unsigned int d = 0; d < NDIM; ++d)
                 {
-                    X_dof_map_cache.dof_indices(elem, X_dof_indices[d], d);
+                    X_dof_map_cache.build_dof_indices(elem, d);
+                }
+                for (unsigned int d = 0; d < NDIM; ++d)
+                {
+                    X_dof_indices[d] = X_dof_map_cache.lookup_dof_indices(elem, d);
                 }
                 get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
 
