@@ -194,7 +194,7 @@ HierarchyMathOps::HierarchyMathOps(std::string name,
     {
         d_sc_idx = var_db->registerVariableAndContext(d_sc_var, d_context, ghosts);
     }
-    
+
     if (var_db->checkVariableExists(d_of_var->getName()))
     {
         d_of_var = var_db->getVariable(d_of_var->getName());
@@ -1988,6 +1988,102 @@ HierarchyMathOps::interp(const int dst_idx,
             Pointer<CellData<NDIM, double> > src_data = patch->getPatchData(src_idx);
 
             d_patch_math_ops.interp(dst_data, src_data, patch, dst_ghost_interp);
+        }
+    }
+    return;
+} // interp
+
+void
+HierarchyMathOps::interp(const int dst_idx,
+                         const Pointer<NodeVariable<NDIM, double> > /*dst_var*/,
+                         const int src_idx,
+                         const Pointer<FaceVariable<NDIM, double> > /*src_var*/,
+                         const Pointer<HierarchyGhostCellInterpolation> src_ghost_fill,
+                         const double src_ghost_fill_time,
+                         const bool src_cf_bdry_synch)
+{
+    if (src_ghost_fill) src_ghost_fill->fillData(src_ghost_fill_time);
+
+    for (int ln = d_finest_ln; ln >= d_coarsest_ln; --ln)
+    {
+        Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
+
+        // Allocate temporary data to synchronize the coarse-fine interface.
+        if ((ln > d_coarsest_ln) && src_cf_bdry_synch)
+        {
+            level->allocatePatchData(d_of_idx);
+        }
+
+        // Interpolate and extract data on the coarse-fine interface.
+        for (PatchLevel<NDIM>::Iterator p(level); p; p++)
+        {
+            Pointer<Patch<NDIM> > patch = level->getPatch(p());
+
+            Pointer<NodeData<NDIM, double> > dst_data = patch->getPatchData(dst_idx);
+            Pointer<FaceData<NDIM, double> > src_data = patch->getPatchData(src_idx);
+
+            d_patch_math_ops.interp(dst_data, src_data, patch);
+
+            if ((ln > d_coarsest_ln) && src_cf_bdry_synch)
+            {
+                Pointer<OuterfaceData<NDIM, double> > of_data = patch->getPatchData(d_of_idx);
+                of_data->copy(*src_data);
+            }
+        }
+
+        // Synchronize the coarse-fine interface and deallocate temporary data.
+        if ((ln > d_coarsest_ln) && src_cf_bdry_synch)
+        {
+            xeqScheduleOuterfaceRestriction(src_idx, d_of_idx, ln - 1);
+            level->deallocatePatchData(d_of_idx);
+        }
+    }
+    return;
+} // interp
+
+void
+HierarchyMathOps::interp(const int dst_idx,
+                         const Pointer<NodeVariable<NDIM, double> > /*dst_var*/,
+                         const int src_idx,
+                         const Pointer<SideVariable<NDIM, double> > /*src_var*/,
+                         const Pointer<HierarchyGhostCellInterpolation> src_ghost_fill,
+                         const double src_ghost_fill_time,
+                         const bool src_cf_bdry_synch)
+{
+    if (src_ghost_fill) src_ghost_fill->fillData(src_ghost_fill_time);
+
+    for (int ln = d_finest_ln; ln >= d_coarsest_ln; --ln)
+    {
+        Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
+
+        // Allocate temporary data to synchronize the coarse-fine interface.
+        if ((ln > d_coarsest_ln) && src_cf_bdry_synch)
+        {
+            level->allocatePatchData(d_os_idx);
+        }
+
+        // Interpolate and extract data on the coarse-fine interface.
+        for (PatchLevel<NDIM>::Iterator p(level); p; p++)
+        {
+            Pointer<Patch<NDIM> > patch = level->getPatch(p());
+
+            Pointer<NodeData<NDIM, double> > dst_data = patch->getPatchData(dst_idx);
+            Pointer<SideData<NDIM, double> > src_data = patch->getPatchData(src_idx);
+
+            d_patch_math_ops.interp(dst_data, src_data, patch);
+
+            if ((ln > d_coarsest_ln) && src_cf_bdry_synch)
+            {
+                Pointer<OutersideData<NDIM, double> > os_data = patch->getPatchData(d_os_idx);
+                os_data->copy(*src_data);
+            }
+        }
+
+        // Synchronize the coarse-fine interface and deallocate temporary data.
+        if ((ln > d_coarsest_ln) && src_cf_bdry_synch)
+        {
+            xeqScheduleOutersideRestriction(src_idx, d_os_idx, ln - 1);
+            level->deallocatePatchData(d_os_idx);
         }
     }
     return;
