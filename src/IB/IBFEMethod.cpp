@@ -729,7 +729,6 @@ IBFEMethod::registerDirectForcingKinematics(Pointer<IBFEDirectForcingKinematics>
     return;
 } // registerDirectForcingKinematics
 
-
 const IntVector<NDIM>&
 IBFEMethod::getMinimumGhostCellWidth() const
 {
@@ -1147,7 +1146,7 @@ IBFEMethod::computeLagrangianForce(const double data_time)
     }
     if (d_has_overlap_force_parts)
     {
-        std::vector<std::unique_ptr<libMesh::PetscVector<double>>> X_half_ghost_vecs(d_X_half_vecs.size());
+        std::vector<std::unique_ptr<libMesh::PetscVector<double> > > X_half_ghost_vecs(d_X_half_vecs.size());
         for (unsigned int k = 0; k < d_X_half_vecs.size(); ++k)
         {
             if (d_is_overlap_force_part[k])
@@ -1155,15 +1154,14 @@ IBFEMethod::computeLagrangianForce(const double data_time)
                 PetscVector<double>* X_half_vec = d_X_half_vecs[k];
                 std::vector<numeric_index_type> ghost_idxs(d_overlap_force_part_ghost_idxs[k].begin(),
                                                            d_overlap_force_part_ghost_idxs[k].end());
-                X_half_ghost_vecs[k] = std::unique_ptr<libMesh::PetscVector<double>>(
-                    new libMesh::PetscVector<double>(
+                X_half_ghost_vecs[k] = std::unique_ptr<libMesh::PetscVector<double> >(new libMesh::PetscVector<double>(
                     X_half_vec->comm(), X_half_vec->size(), X_half_vec->local_size(), ghost_idxs));
                 *X_half_ghost_vecs[k] = *X_half_vec;
                 X_half_ghost_vecs[k]->close();
             }
         }
         std::vector<libMesh::PetscVector<double>*> vec_pointers;
-        for (std::unique_ptr<libMesh::PetscVector<double>> &vec : X_half_ghost_vecs)
+        for (std::unique_ptr<libMesh::PetscVector<double> >& vec : X_half_ghost_vecs)
         {
             vec_pointers.push_back(vec.get());
         }
@@ -1641,14 +1639,12 @@ IBFEMethod::doInitializeFEData(const bool use_present_data)
     return;
 } // doInitializeFEData
 
-
 void
 IBFEMethod::updateCachedIBGhostedVectors()
 {
     d_F_IB_solution_vecs.resize(d_num_parts);
     d_Q_IB_solution_vecs.resize(d_num_parts);
-    if (d_use_ghosted_velocity_rhs)
-        d_U_IB_rhs_vecs.resize(d_num_parts);
+    if (d_use_ghosted_velocity_rhs) d_U_IB_rhs_vecs.resize(d_num_parts);
     d_X_IB_solution_vecs.resize(d_num_parts);
     for (unsigned int part = 0; part < d_num_parts; ++part)
     {
@@ -1732,20 +1728,19 @@ IBFEMethod::addWorkloadEstimate(Pointer<PatchHierarchy<NDIM> > hierarchy, const 
 
         const auto right_padding = std::size_t(std::log10(n_processes)) + 1;
 
-        int ierr = MPI_Allreduce(
-            MPI_IN_PLACE, workload_per_processor.data(),
-            workload_per_processor.size(), MPI_DOUBLE,
-            MPI_SUM, SAMRAI::tbox::SAMRAI_MPI::commWorld);
+        int ierr = MPI_Allreduce(MPI_IN_PLACE,
+                                 workload_per_processor.data(),
+                                 workload_per_processor.size(),
+                                 MPI_DOUBLE,
+                                 MPI_SUM,
+                                 SAMRAI::tbox::SAMRAI_MPI::commWorld);
         TBOX_ASSERT(ierr == 0);
         if (current_rank == 0)
         {
             for (int rank = 0; rank < n_processes; ++rank)
             {
-                SAMRAI::tbox::plog << "workload estimate on processor "
-                                   << std::setw(right_padding) << std::left << rank
-                                   << " = "
-                                   << long(workload_per_processor[rank])
-                                   << '\n';
+                SAMRAI::tbox::plog << "workload estimate on processor " << std::setw(right_padding) << std::left << rank
+                                   << " = " << long(workload_per_processor[rank]) << '\n';
             }
         }
 
@@ -1770,11 +1765,8 @@ IBFEMethod::addWorkloadEstimate(Pointer<PatchHierarchy<NDIM> > hierarchy, const 
         {
             for (int rank = 0; rank < n_processes; ++rank)
             {
-                SAMRAI::tbox::plog << "local active DoFs on processor "
-                                   << std::setw(right_padding) << std::left << rank
-                                   << " = "
-                                   << dofs_per_processor[rank]
-                                   << '\n';
+                SAMRAI::tbox::plog << "local active DoFs on processor " << std::setw(right_padding) << std::left << rank
+                                   << " = " << dofs_per_processor[rank] << '\n';
             }
         }
     }
@@ -2571,15 +2563,14 @@ IBFEMethod::assembleInteriorForceDensityRHS(PetscVector<double>& G_rhs_vec,
 void
 IBFEMethod::resetOverlapNodalValues(const std::string& system_name, const std::vector<NumericVector<double>*>& F_vecs)
 {
-    std::vector<std::unique_ptr<libMesh::PetscVector<double>>> F_ghost_vecs(d_num_parts);
+    std::vector<std::unique_ptr<libMesh::PetscVector<double> > > F_ghost_vecs(d_num_parts);
     for (unsigned int part = 0; part < d_num_parts; ++part)
     {
         if (d_is_overlap_velocity_master_part[part])
         {
             std::vector<numeric_index_type> ghost_idxs(d_overlap_velocity_part_ghost_idxs[part].begin(),
                                                        d_overlap_velocity_part_ghost_idxs[part].end());
-            F_ghost_vecs[part] = std::unique_ptr<libMesh::PetscVector<double>>
-                (new libMesh::PetscVector<double>(
+            F_ghost_vecs[part] = std::unique_ptr<libMesh::PetscVector<double> >(new libMesh::PetscVector<double>(
                 F_vecs[part]->comm(), F_vecs[part]->size(), F_vecs[part]->local_size(), ghost_idxs));
             copy_and_synch(*F_vecs[part], *F_ghost_vecs[part], /*close_v_in*/ false);
         }
@@ -2967,10 +2958,9 @@ IBFEMethod::spreadTransmissionForceDensity(const int f_data_idx,
             // TODO: surely there is a better way to get the type of a side
             // than this!
             std::unique_ptr<Elem> side_ptr = elem->build_side_ptr(0);
-            const quad_key_type side_quad_key = std::make_tuple(side_ptr->type(),
-                                                                d_spread_spec[part].quad_type,
-                                                                std::get<2>(elem_quad_key));
-            libMesh::QBase &side_quadrature = side_quad_cache[side_quad_key];
+            const quad_key_type side_quad_key =
+                std::make_tuple(side_ptr->type(), d_spread_spec[part].quad_type, std::get<2>(elem_quad_key));
+            libMesh::QBase& side_quadrature = side_quad_cache[side_quad_key];
 
             // Loop over the element boundaries.
             for (unsigned short int side = 0; side < elem->n_sides(); ++side)

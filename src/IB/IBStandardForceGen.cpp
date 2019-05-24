@@ -32,8 +32,8 @@
 
 /////////////////////////////// INCLUDES /////////////////////////////////////
 
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -120,7 +120,7 @@ resetLocalOrNonlocalPETScIndices(std::vector<int>& inds,
     }
     return;
 } // resetLocalOrNonlocalPETScIndices
-}
+} // namespace
 
 /////////////////////////////// PUBLIC ///////////////////////////////////////
 

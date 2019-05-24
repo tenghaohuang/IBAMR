@@ -151,9 +151,8 @@ StokesSecondOrderWaveBcCoef::setBcCoefs(Pointer<ArrayData<NDIM, double> >& acoef
             const double theta = d_wave_number * dof_posn[0] - d_omega * fill_time;
             const double kd = d_wave_number * d_depth;
             const double z_plus_d = dof_posn[dir];
-            const double eta = 0.5 * H * cos(theta) +
-                               H * H * d_wave_number / 16.0 * cosh(kd) * (2.0 + cosh(2.0 * kd)) /
-                                   std::pow(sinh(kd), 3.0) * cos(2.0 * theta);
+            const double eta = 0.5 * H * cos(theta) + H * H * d_wave_number / 16.0 * cosh(kd) * (2.0 + cosh(2.0 * kd)) /
+                                                          std::pow(sinh(kd), 3.0) * cos(2.0 * theta);
             const double phi = -eta + (z_plus_d - d_depth);
             double h_phi;
             if (phi < -alpha)

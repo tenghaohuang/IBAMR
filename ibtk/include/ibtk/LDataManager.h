@@ -914,8 +914,7 @@ public:
      * Register user defined Lagrangian data to be maintained
      *
      */
-    void registerUserDefinedLData(const std::string& data_name,
-                                  int depth);
+    void registerUserDefinedLData(const std::string& data_name, int depth);
 
 protected:
     /*!

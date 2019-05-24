@@ -214,7 +214,7 @@ get_dirichlet_bdry_ids(const std::vector<boundary_id_type>& bdry_ids)
     }
     return dirichlet_bdry_ids;
 } // get_dirichlet_bdry_ids
-}
+} // namespace
 
 const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID = 0x100;
 const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_Y_BDRY_ID = 0x200;
@@ -350,7 +350,7 @@ FEDataManager::getDofMapCache(const std::string& system_name)
 FEDataManager::SystemDofMapCache*
 FEDataManager::getDofMapCache(unsigned int system_num)
 {
-    std::unique_ptr<SystemDofMapCache> &dof_map_cache = d_system_dof_map_cache[system_num];
+    std::unique_ptr<SystemDofMapCache>& dof_map_cache = d_system_dof_map_cache[system_num];
     if (dof_map_cache == nullptr)
     {
         dof_map_cache.reset(new SystemDofMapCache(d_es->get_system(system_num)));
@@ -649,7 +649,8 @@ FEDataManager::spread(const int f_data_idx,
                       const bool close_F,
                       const bool close_X)
 {
-    spread(f_data_idx, F_vec, X_vec, system_name, d_default_spread_spec, f_phys_bdry_op, fill_data_time, close_X, close_F);
+    spread(
+        f_data_idx, F_vec, X_vec, system_name, d_default_spread_spec, f_phys_bdry_op, fill_data_time, close_X, close_F);
     return;
 } // spread
 
@@ -902,11 +903,11 @@ FEDataManager::spread(const int f_data_idx,
                 Elem* const elem = patch_elems[e_idx];
                 const auto& F_dof_indices = F_dof_map_cache.dof_indices(elem);
                 get_values_for_interpolation(F_node, *F_petsc_vec, F_local_soln, F_dof_indices);
-                const quad_key_type &key = quad_keys[e_idx];
-                FEBase &X_fe = X_fe_cache[key];
-                FEBase &F_fe = F_fe_cache[key];
-                FEMap &fe_map = fe_map_cache[key];
-                QBase &qrule = d_quadrature_cache[key];
+                const quad_key_type& key = quad_keys[e_idx];
+                FEBase& X_fe = X_fe_cache[key];
+                FEBase& F_fe = F_fe_cache[key];
+                FEMap& fe_map = fe_map_cache[key];
+                QBase& qrule = d_quadrature_cache[key];
 
                 // See the note in interpWeighted to explain why we override
                 // libMesh's reinit logic here
@@ -934,8 +935,10 @@ FEDataManager::spread(const int f_data_idx,
                 std::fill(F_begin, F_begin + n_vars * n_qp, 0.0);
                 std::fill(X_begin, X_begin + NDIM * n_qp, 0.0);
 
-                sum_weighted_elem_solution</*weights_are_unity*/ false>(n_vars, F_dof_indices[0].size(), qp_offset, phi_F, JxW_F, F_node, F_JxW_qp);
-                sum_weighted_elem_solution</*weights_are_unity*/ true>(NDIM, phi_X.size(), qp_offset, phi_X, {}, X_nodes[e_idx], X_qp);
+                sum_weighted_elem_solution</*weights_are_unity*/ false>(
+                    n_vars, F_dof_indices[0].size(), qp_offset, phi_F, JxW_F, F_node, F_JxW_qp);
+                sum_weighted_elem_solution</*weights_are_unity*/ true>(
+                    NDIM, phi_X.size(), qp_offset, phi_X, {}, X_nodes[e_idx], X_qp);
                 qp_offset += n_qp;
             }
 
@@ -1131,9 +1134,8 @@ FEDataManager::prolongData(const int f_data_idx,
                         libMesh::Point p;
                         for (unsigned int d = 0; d < NDIM; ++d)
                         {
-                            p(d) =
-                                patch_x_lower[d] +
-                                patch_dx[d] * (static_cast<double>(i_s(d) - patch_lower[d]) + (d == axis ? 0.0 : 0.5));
+                            p(d) = patch_x_lower[d] + patch_dx[d] * (static_cast<double>(i_s(d) - patch_lower[d]) +
+                                                                     (d == axis ? 0.0 : 0.5));
                         }
                         static const double TOL = std::sqrt(std::numeric_limits<double>::epsilon());
                         const libMesh::Point ref_coords = FEInterface::inverse_map(dim, X_fe_type, elem, p, TOL, false);
@@ -1335,7 +1337,15 @@ FEDataManager::interpWeighted(const int f_data_idx,
                               const bool close_F,
                               const bool close_X)
 {
-    interpWeighted(f_data_idx, F_vec, X_vec, system_name, d_default_interp_spec, f_refine_scheds, fill_data_time, close_F, close_X);
+    interpWeighted(f_data_idx,
+                   F_vec,
+                   X_vec,
+                   system_name,
+                   d_default_interp_spec,
+                   f_refine_scheds,
+                   fill_data_time,
+                   close_F,
+                   close_X);
     return;
 } // interpWeighted
 
@@ -1530,7 +1540,7 @@ FEDataManager::interpWeighted(const int f_data_idx,
         F_vec.zero();
         auto F_petsc_vec = dynamic_cast<PetscVector<double>*>(&F_vec);
         Vec F_local_form = nullptr;
-        double *F_local_soln = nullptr;
+        double* F_local_soln = nullptr;
         const bool is_ghosted = F_vec.type() == GHOSTED;
         if (is_ghosted)
         {
@@ -1600,9 +1610,9 @@ FEDataManager::interpWeighted(const int f_data_idx,
             for (unsigned int e_idx = 0; e_idx < num_active_patch_elems; ++e_idx)
             {
                 Elem* const elem = patch_elems[e_idx];
-                const quad_key_type &key = quad_keys[e_idx];
-                QBase &qrule = d_quadrature_cache[key];
-                FEBase &X_fe = X_fe_cache[key];
+                const quad_key_type& key = quad_keys[e_idx];
+                QBase& qrule = d_quadrature_cache[key];
+                FEBase& X_fe = X_fe_cache[key];
 
                 // libMesh::FE defaults to recalculating *everything* when we
                 // call reinit unless we first request things (see
@@ -1719,8 +1729,7 @@ FEDataManager::interpWeighted(const int f_data_idx,
                     {
                         for (unsigned int i = 0; i < dof_id_scratch.size(); ++i)
                         {
-                            F_local_soln[F_petsc_vec->map_global_to_local_index(dof_id_scratch[i])]
-                                += F_rhs(i);
+                            F_local_soln[F_petsc_vec->map_global_to_local_index(dof_id_scratch[i])] += F_rhs(i);
                         }
                     }
                     else
@@ -1785,10 +1794,19 @@ FEDataManager::interp(const int f_data_idx,
 
     // Interpolate quantity at quadrature points and filter it to nodal points.
     std::unique_ptr<NumericVector<double> > F_rhs_vec = F_vec.zero_clone();
-    interpWeighted(f_data_idx, *F_rhs_vec, X_vec, system_name, interp_spec, f_refine_scheds, fill_data_time, /*close_F*/ true, close_X);
+    interpWeighted(f_data_idx,
+                   *F_rhs_vec,
+                   X_vec,
+                   system_name,
+                   interp_spec,
+                   f_refine_scheds,
+                   fill_data_time,
+                   /*close_F*/ true,
+                   close_X);
 
     // Solve for the nodal values.
-    computeL2Projection(F_vec, *F_rhs_vec, system_name, interp_spec.use_consistent_mass_matrix, true /*close_U*/, false /*close_F*/);
+    computeL2Projection(
+        F_vec, *F_rhs_vec, system_name, interp_spec.use_consistent_mass_matrix, true /*close_U*/, false /*close_F*/);
 
     IBTK_TIMER_STOP(t_interp);
     return;
@@ -1945,9 +1963,8 @@ FEDataManager::restrictData(const int f_data_idx,
                         libMesh::Point p;
                         for (unsigned int d = 0; d < NDIM; ++d)
                         {
-                            p(d) =
-                                patch_x_lower[d] +
-                                patch_dx[d] * (static_cast<double>(i_s(d) - patch_lower[d]) + (d == axis ? 0.0 : 0.5));
+                            p(d) = patch_x_lower[d] + patch_dx[d] * (static_cast<double>(i_s(d) - patch_lower[d]) +
+                                                                     (d == axis ? 0.0 : 0.5));
                         }
                         static const double TOL = std::sqrt(std::numeric_limits<double>::epsilon());
                         const libMesh::Point ref_coords = FEInterface::inverse_map(dim, X_fe_type, elem, p, TOL, false);
@@ -2044,10 +2061,10 @@ FEDataManager::buildL2ProjectionSolver(const std::string& system_name)
         const std::vector<std::vector<double> >& phi = fe->get_phi();
 
         // Build solver components.
-        std::unique_ptr<LinearSolver<double>> solver = LinearSolver<double>::build(comm);
+        std::unique_ptr<LinearSolver<double> > solver = LinearSolver<double>::build(comm);
         solver->init();
 
-        std::unique_ptr<SparseMatrix<double>> M_mat = SparseMatrix<double>::build(comm);
+        std::unique_ptr<SparseMatrix<double> > M_mat = SparseMatrix<double>::build(comm);
         M_mat->attach_dof_map(dof_map);
         M_mat->init();
 
@@ -2175,7 +2192,7 @@ FEDataManager::buildDiagonalL2MassMatrix(const std::string& system_name)
         const std::vector<std::vector<double> >& phi = fe->get_phi();
 
         // Build solver components.
-        std::unique_ptr<NumericVector<double>> M_vec = system.solution->zero_clone();
+        std::unique_ptr<NumericVector<double> > M_vec = system.solution->zero_clone();
 
         // Loop over the mesh to construct the system matrix.
         DenseMatrix<double> M_e;
@@ -2802,20 +2819,19 @@ FEDataManager::updateQuadPointCountData(const int coarsest_ln, const int finest_
             std::vector<unsigned long> n_q_points_on_processors(n_processes);
             n_q_points_on_processors[current_rank] = n_local_q_points;
 
-            const int ierr = MPI_Allreduce(
-                MPI_IN_PLACE, n_q_points_on_processors.data(),
-                n_q_points_on_processors.size(), MPI_UNSIGNED_LONG,
-                MPI_SUM, SAMRAI::tbox::SAMRAI_MPI::commWorld);
+            const int ierr = MPI_Allreduce(MPI_IN_PLACE,
+                                           n_q_points_on_processors.data(),
+                                           n_q_points_on_processors.size(),
+                                           MPI_UNSIGNED_LONG,
+                                           MPI_SUM,
+                                           SAMRAI::tbox::SAMRAI_MPI::commWorld);
             TBOX_ASSERT(ierr == 0);
             if (current_rank == 0)
             {
                 for (int rank = 0; rank < n_processes; ++rank)
                 {
-                    SAMRAI::tbox::plog << "quadrature points on processor "
-                                       << std::setw(right_padding) << std::left << rank
-                                       << " = "
-                                       << n_q_points_on_processors[rank]
-                                       << '\n';
+                    SAMRAI::tbox::plog << "quadrature points on processor " << std::setw(right_padding) << std::left
+                                       << rank << " = " << n_q_points_on_processors[rank] << '\n';
                 }
             }
         }

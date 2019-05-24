@@ -894,7 +894,8 @@ IBFESurfaceMethod::computeLagrangianForce(const double data_time)
         // valid, value if we don't use jump conditions
         FEDataManager::SystemDofMapCache* DP_dof_map_cache =
             d_use_jump_conditions ? d_fe_data_managers[part]->getDofMapCache(PRESSURE_JUMP_SYSTEM_NAME) : nullptr;
-        const System* DP_system = d_use_jump_conditions ? &equation_systems->get_system(PRESSURE_JUMP_SYSTEM_NAME) : nullptr;
+        const System* DP_system =
+            d_use_jump_conditions ? &equation_systems->get_system(PRESSURE_JUMP_SYSTEM_NAME) : nullptr;
         const DofMap* DP_dof_map = d_use_jump_conditions ? &DP_system->get_dof_map() : nullptr;
         if (d_use_jump_conditions)
         {

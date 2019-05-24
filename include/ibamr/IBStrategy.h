@@ -107,7 +107,7 @@ namespace IBAMR
 {
 class IBHierarchyIntegrator;
 class INSHierarchyIntegrator;
-}
+} // namespace IBAMR
 
 /////////////////////////////// CLASS DEFINITION /////////////////////////////
 
