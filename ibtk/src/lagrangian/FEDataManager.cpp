@@ -45,8 +45,6 @@
 #include <utility>
 #include <vector>
 
-#include <unistd.h>
-
 #include "BasePatchHierarchy.h"
 #include "BasePatchLevel.h"
 #include "Box.h"
@@ -197,10 +195,10 @@ collect_unique_elems(std::vector<Elem*>& elems, const ContainerOfContainers& ele
     return;
 } // collect_unique_elems
 
-inline short int
-get_dirichlet_bdry_ids(const std::vector<short int>& bdry_ids)
+inline boundary_id_type
+get_dirichlet_bdry_ids(const std::vector<boundary_id_type>& bdry_ids)
 {
-    short int dirichlet_bdry_ids = 0;
+    boundary_id_type dirichlet_bdry_ids = 0;
     for (const auto& bdry_id : bdry_ids)
     {
         if (bdry_id == FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID ||
@@ -216,99 +214,15 @@ get_dirichlet_bdry_ids(const std::vector<short int>& bdry_ids)
     }
     return dirichlet_bdry_ids;
 } // get_dirichlet_bdry_ids
-
-inline double
-get_elem_hmax(const Elem* const elem, const boost::multi_array<double, 2>& X_node)
-{
-    double hmax_squared = 0.0;
-    const unsigned int n_vertices = elem->n_vertices();
-    if (elem->dim() == 1)
-    {
-        for (unsigned int n1 = 0; n1 < n_vertices; ++n1)
-        {
-            for (unsigned int n2 = n1 + 1; n2 < n_vertices; ++n2)
-            {
-                double diff_sq = 0.0;
-                for (unsigned int d = 0; d < NDIM; ++d)
-                {
-                    diff_sq += (X_node[n1][d] - X_node[n2][d]) * (X_node[n1][d] - X_node[n2][d]);
-                }
-                hmax_squared = std::max(hmax_squared, diff_sq);
-            }
-        }
-    }
-    else
-    {
-        const unsigned int n_edges = elem->n_edges();
-        for (unsigned int e = 0; e < n_edges; ++e)
-        {
-            for (unsigned int n1 = 0; n1 < n_vertices; ++n1)
-            {
-                if (!elem->is_node_on_edge(n1, e)) continue;
-                for (unsigned int n2 = n1 + 1; n2 < n_vertices; ++n2)
-                {
-                    if (!elem->is_node_on_edge(n2, e)) continue;
-                    double diff_sq = 0.0;
-                    for (unsigned int d = 0; d < NDIM; ++d)
-                    {
-                        diff_sq += (X_node[n1][d] - X_node[n2][d]) * (X_node[n1][d] - X_node[n2][d]);
-                    }
-                    hmax_squared = std::max(hmax_squared, diff_sq);
-                }
-            }
-        }
-    }
-    return std::sqrt(hmax_squared);
-} // get_elem_hmax
-
-/**
- * Return the quadrature key description (see QuadratureCache, FECache, and
- * FEMapCache) of a quadrature rule.
- *
- * @seealso FEDataManager::updateQuadratureRule.
- */
-inline std::tuple<libMesh::ElemType, libMesh::QuadratureType, libMesh::Order>
-getQuadratureKey(const QuadratureType quad_type,
-                 Order order,
-                 const bool use_adaptive_quadrature,
-                 const double point_density,
-                 const Elem* const elem,
-                 const boost::multi_array<double, 2>& X_node,
-                 const double dx_min)
-{
-    const ElemType elem_type = elem->type();
-    TBOX_ASSERT(elem->p_level() == 0); // higher levels are not implemented
-    if (use_adaptive_quadrature)
-    {
-        const double hmax = get_elem_hmax(elem, X_node);
-        const int min_pts = elem->default_order() == FIRST ? 2 : 3;
-        const int npts = std::max(min_pts, int(std::ceil(point_density * hmax / dx_min)));
-        switch (quad_type)
-        {
-        case QGAUSS:
-            order = static_cast<Order>(std::min(2 * npts - 1, static_cast<int>(FORTYTHIRD)));
-            break;
-        case QGRID:
-            order = static_cast<Order>(npts);
-            break;
-        default:
-            TBOX_ERROR("IBTK::getQuadratureKey():\n"
-                       << "  adaptive quadrature rules are available only for quad_type = QGAUSS "
-                          "or QGRID\n");
-        }
-    }
-
-    return std::make_tuple(elem_type, quad_type, order);
-}
 }
 
-const short int FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID = 0x100;
-const short int FEDataManager::ZERO_DISPLACEMENT_Y_BDRY_ID = 0x200;
-const short int FEDataManager::ZERO_DISPLACEMENT_Z_BDRY_ID = 0x400;
-const short int FEDataManager::ZERO_DISPLACEMENT_XY_BDRY_ID = 0x100 | 0x200;
-const short int FEDataManager::ZERO_DISPLACEMENT_XZ_BDRY_ID = 0x100 | 0x400;
-const short int FEDataManager::ZERO_DISPLACEMENT_YZ_BDRY_ID = 0x200 | 0x400;
-const short int FEDataManager::ZERO_DISPLACEMENT_XYZ_BDRY_ID = 0x100 | 0x200 | 0x400;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID = 0x100;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_Y_BDRY_ID = 0x200;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_Z_BDRY_ID = 0x400;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_XY_BDRY_ID = 0x100 | 0x200;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_XZ_BDRY_ID = 0x100 | 0x400;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_YZ_BDRY_ID = 0x200 | 0x400;
+const boundary_id_type FEDataManager::ZERO_DISPLACEMENT_XYZ_BDRY_ID = 0x100 | 0x200 | 0x400;
 std::map<std::string, FEDataManager*> FEDataManager::s_data_manager_instances;
 bool FEDataManager::s_registered_callback = false;
 unsigned char FEDataManager::s_shutdown_priority = 200;
@@ -380,6 +294,7 @@ FEDataManager::setPatchHierarchy(Pointer<PatchHierarchy<NDIM> > hierarchy)
     // Reset the hierarchy.
     TBOX_ASSERT(hierarchy);
     d_hierarchy = hierarchy;
+    d_cached_eulerian_data.setPatchHierarchy(hierarchy);
     return;
 } // setPatchHierarchy
 
@@ -397,6 +312,7 @@ FEDataManager::setPatchLevels(const int coarsest_ln, const int finest_ln)
     TBOX_ASSERT((coarsest_ln >= 0) && (finest_ln >= coarsest_ln) && (finest_ln <= d_hierarchy->getFinestLevelNumber()));
     d_coarsest_ln = coarsest_ln;
     d_finest_ln = finest_ln;
+    d_cached_eulerian_data.resetLevels(coarsest_ln, finest_ln);
     return;
 } // setPatchLevels
 
@@ -493,6 +409,7 @@ FEDataManager::reinitElementMappings()
     d_active_patch_ghost_dofs.clear();
     d_active_elem_bboxes.clear();
     d_system_ghost_vec.clear();
+    d_system_ib_ghost_vec.clear();
 
     // also clear any stored matrices:
     d_L2_proj_solver.clear();
@@ -504,6 +421,26 @@ FEDataManager::reinitElementMappings()
     // and use it.
     collectActivePatchElements(d_active_patch_elem_map, d_level_number, d_ghost_width);
     collectActivePatchNodes(d_active_patch_node_map, d_active_patch_elem_map);
+
+    // Reset the sets of dofs corresponding to IB ghost data. This is usually
+    // a superset of the standard (i.e., all dofs on unowned cells adjacent to
+    // locally owned cells) ghost data.
+    std::vector<Elem*> active_elems;
+    collect_unique_elems(active_elems, d_active_patch_elem_map);
+    for (unsigned int system_n = 0; system_n < d_es->n_systems(); ++system_n)
+    {
+        const System& system = d_es->get_system(system_n);
+        std::vector<libMesh::dof_id_type> ib_ghost_dofs;
+        collectGhostDOFIndices(ib_ghost_dofs, active_elems, system.name());
+
+        // Match the expected vector sizes by using the solution for non-ghost
+        // sizes:
+        const NumericVector<double>& solution = *system.solution;
+        std::unique_ptr<PetscVector<double> > exemplar_ib_vector(new PetscVector<double>(
+            system.comm(), solution.size(), solution.local_size(), ib_ghost_dofs, libMesh::GHOSTED));
+        d_active_patch_ghost_dofs[system.name()] = std::move(ib_ghost_dofs);
+        d_system_ib_ghost_vec[system.name()] = std::move(exemplar_ib_vector);
+    }
 
     IBTK_TIMER_STOP(t_reinit_element_mappings);
     return;
@@ -521,19 +458,15 @@ FEDataManager::buildGhostedSolutionVector(const std::string& system_name, const 
     IBTK_TIMER_START(t_build_ghosted_solution_vector);
 
     NumericVector<double>* sol_vec = getSolutionVector(system_name);
+    TBOX_ASSERT(sol_vec);
     if (!d_system_ghost_vec.count(system_name))
     {
-        plog << "FEDataManager::buildGhostedSolutionVector(): building ghosted solution vector for system: "
-             << system_name << "\n";
-        if (!d_active_patch_ghost_dofs.count(system_name))
+        if (d_enable_logging)
         {
-            plog << "FEDataManager::buildGhostedSolutionVector(): constructing ghost DOF index "
-                    "list for system: "
+            plog << "FEDataManager::buildGhostedSolutionVector(): building ghosted solution vector for system: "
                  << system_name << "\n";
-            std::vector<Elem*> active_elems;
-            collect_unique_elems(active_elems, d_active_patch_elem_map);
-            collectGhostDOFIndices(d_active_patch_ghost_dofs[system_name], active_elems, system_name);
         }
+        TBOX_ASSERT(d_active_patch_ghost_dofs.count(system_name));
         std::unique_ptr<NumericVector<double> > sol_ghost_vec = NumericVector<double>::build(sol_vec->comm());
         sol_ghost_vec->init(
             sol_vec->size(), sol_vec->local_size(), d_active_patch_ghost_dofs[system_name], true, GHOSTED);
@@ -546,6 +479,18 @@ FEDataManager::buildGhostedSolutionVector(const std::string& system_name, const 
     return sol_ghost_vec;
 } // buildGhostedSolutionVector
 
+std::unique_ptr<PetscVector<double> >
+FEDataManager::buildIBGhostedVector(const std::string& system_name) const
+{
+    TBOX_ASSERT(d_system_ib_ghost_vec.find(system_name) != d_system_ib_ghost_vec.end());
+    const std::unique_ptr<PetscVector<double> >& exemplar_ib_vector = d_system_ib_ghost_vec.at(system_name);
+    TBOX_ASSERT(exemplar_ib_vector);
+    std::unique_ptr<NumericVector<double> > clone = exemplar_ib_vector->zero_clone();
+    PetscVector<double>* ptr = dynamic_cast<PetscVector<double>*>(clone.release());
+    TBOX_ASSERT(ptr);
+    return std::unique_ptr<PetscVector<double> >(ptr);
+}
+
 NumericVector<double>*
 FEDataManager::getCoordsVector() const
 {
@@ -557,6 +502,142 @@ FEDataManager::buildGhostedCoordsVector(const bool localize_data)
 {
     return buildGhostedSolutionVector(COORDINATES_SYSTEM_NAME, localize_data);
 } // buildGhostedCoordsVector
+
+/**
+ * @brief Compute the product of the finite element representation of the
+ * force and (optionally) a set of weights (e.g., JxW values) at all
+ * quadrature points on an element. See integrate_elem_rhs for details on the
+ * first two template arguments.
+ *
+ * @tparam weights_are_unity Assume that all values in @p weights are 1. This
+ * value should be true when we are only interpolating values at quadrature
+ * points and otherwise false.
+ *
+ * @param[in] qp_offset Offset used to calculate an index into @p F_w_qp. The
+ * relevant part of the array is assumed to start at <code>n_vars *
+ * qp_offset</code>.
+ *
+ * @param[in] phi_F Values of test functions evaluated at quadrature points,
+ * indexed by test function number and then quadrature point number.
+ *
+ * @param[in] weights Vector containing weights at quadrature points: in the
+ * case of force spreading this is the standard JxW array. If
+ * <code>weights_are_unity</code> is true then its values are assumed to be 1.
+ *
+ * @param[in] F_node Values of the finite element solution (i.e., the
+ * multipliers on each trial function) on the current element.
+ *
+ * @param[out] F_w_qp Globally indexed array containing the product of the
+ * finite element representation of the force and weights at the quadrature
+ * points on the current element. The array is indexed by quadrature point and
+ * then by variable: i.e., if @p n_vars is greater than one then variables of
+ * the vector-valued force being evaluated at a certain quadrature point are
+ * contiguous.
+ */
+template <int n_vars, int n_basis, bool weights_are_unity = false>
+void
+sum_weighted_elem_solution_n_vars_n_basis(const int qp_offset,
+                                          const std::vector<std::vector<double> >& phi_F,
+                                          const std::vector<double>& weights,
+                                          const boost::multi_array<double, 2>& F_node,
+                                          std::vector<double>& F_w_qp)
+{
+    const int n_qp = phi_F[0].size();
+    if (n_vars == -1 || n_basis == -1)
+    {
+        const int n_basis_ = phi_F.size();
+        const int n_vars_ = F_node.shape()[1];
+        for (int qp = 0; qp < n_qp; ++qp)
+        {
+            const int idx = n_vars_ * (qp_offset + qp);
+            for (int k = 0; k < n_basis_; ++k)
+                for (int i = 0; i < n_vars_; ++i) F_w_qp[idx + i] += F_node[k][i] * phi_F[k][qp];
+            if (!weights_are_unity)
+                for (int i = 0; i < n_vars_; ++i) F_w_qp[idx + i] *= weights[qp];
+        }
+    }
+    else
+    {
+        for (int qp = 0; qp < n_qp; ++qp)
+        {
+            const int idx = n_vars * (qp_offset + qp);
+            for (int k = 0; k < n_basis; ++k)
+                for (int i = 0; i < n_vars; ++i) F_w_qp[idx + i] += F_node[k][i] * phi_F[k][qp];
+            if (!weights_are_unity)
+                for (int i = 0; i < n_vars; ++i) F_w_qp[idx + i] *= weights[qp];
+        }
+    }
+}
+
+// Dispatch to the above function based on the number of variables and number
+// of basis functions.
+template <int n_vars, bool weights_are_unity = false>
+void
+sum_weighted_elem_solution_n_vars(const int n_basis,
+                                  const int qp_offset,
+                                  const std::vector<std::vector<double> >& phi_F,
+                                  const std::vector<double>& weights,
+                                  const boost::multi_array<double, 2>& F_node,
+                                  std::vector<double>& F_w_qp)
+{
+    switch (n_basis)
+    {
+#define SWITCH_CASE(k)                                                                                                 \
+    case k:                                                                                                            \
+    {                                                                                                                  \
+        sum_weighted_elem_solution_n_vars_n_basis<n_vars, k, weights_are_unity>(                                       \
+            qp_offset, phi_F, weights, F_node, F_w_qp);                                                                \
+        return;                                                                                                        \
+    }
+        SWITCH_CASE(1)
+        SWITCH_CASE(2)
+        SWITCH_CASE(3)
+        SWITCH_CASE(4)
+        SWITCH_CASE(5)
+        SWITCH_CASE(6)
+        SWITCH_CASE(8)
+        SWITCH_CASE(9)
+        SWITCH_CASE(10)
+        SWITCH_CASE(27)
+#undef SWITCH_CASE
+    default:
+        sum_weighted_elem_solution_n_vars_n_basis<n_vars, -1, weights_are_unity>(
+            qp_offset, phi_F, weights, F_node, F_w_qp);
+        return;
+    }
+    return;
+}
+
+// Dispatch to the above function based on the number of variables.
+template <bool weights_are_unity = false>
+void
+sum_weighted_elem_solution(const int n_vars,
+                           const int n_basis,
+                           const int qp_offset,
+                           const std::vector<std::vector<double> >& phi_F,
+                           const std::vector<double>& weights,
+                           const boost::multi_array<double, 2>& F_node,
+                           std::vector<double>& F_w_qp)
+{
+    switch (n_vars)
+    {
+#define SWITCH_CASE(k)                                                                                                 \
+    case k:                                                                                                            \
+    {                                                                                                                  \
+        sum_weighted_elem_solution_n_vars<k, weights_are_unity>(n_basis, qp_offset, phi_F, weights, F_node, F_w_qp);   \
+        return;                                                                                                        \
+    }
+        SWITCH_CASE(1)
+        SWITCH_CASE(2)
+        SWITCH_CASE(3)
+        SWITCH_CASE(4)
+        SWITCH_CASE(5)
+#undef SWITCH_CASE
+    default:
+        sum_weighted_elem_solution_n_vars<-1, weights_are_unity>(n_basis, qp_offset, phi_F, weights, F_node, F_w_qp);
+    }
+    return;
+}
 
 void
 FEDataManager::spread(const int f_data_idx,
@@ -585,11 +666,8 @@ FEDataManager::spread(const int f_data_idx,
 {
     IBTK_TIMER_START(t_spread);
 
-    const int coarsest_ln = 0;
-    const int finest_ln = d_hierarchy->getFinestLevelNumber();
-    VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
-
     // Determine the type of data centering.
+    auto var_db = VariableDatabase<NDIM>::getDatabase();
     Pointer<hier::Variable<NDIM> > f_var;
     var_db->mapIndexToVariable(f_data_idx, f_var);
     Pointer<CellVariable<NDIM, double> > f_cc_var = f_var;
@@ -599,12 +677,7 @@ FEDataManager::spread(const int f_data_idx,
     TBOX_ASSERT(cc_data || sc_data);
 
     // Make a copy of the Eulerian data.
-    const int f_copy_data_idx = var_db->registerClonedPatchDataIndex(f_var, f_data_idx);
-    for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
-    {
-        Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
-        level->allocatePatchData(f_copy_data_idx);
-    }
+    const auto f_copy_data_idx = d_cached_eulerian_data.getCachedPatchDataIndex(f_data_idx);
     Pointer<HierarchyDataOpsReal<NDIM, double> > f_data_ops =
         HierarchyDataOpsManager<NDIM>::getManager()->getOperationsDouble(f_var, d_hierarchy, true);
     f_data_ops->swapData(f_copy_data_idx, f_data_idx);
@@ -775,7 +848,7 @@ FEDataManager::spread(const int f_data_idx,
         // Loop over the patches to interpolate nodal values on the FE mesh to
         // the element quadrature points, then spread those values onto the
         // Eulerian grid.
-        boost::multi_array<double, 2> F_node, X_node;
+        boost::multi_array<double, 2> F_node;
         std::vector<double> F_JxW_qp, X_qp;
         int local_patch_num = 0;
         for (PatchLevel<NDIM>::Iterator p(level); p; p++, ++local_patch_num)
@@ -794,6 +867,9 @@ FEDataManager::spread(const int f_data_idx,
             // processor is surprisingly expensive, so cache the keys:
             std::vector<quad_key_type> quad_keys(num_active_patch_elems);
 
+            // Cache interpolated positions too:
+            std::vector<boost::multi_array<double, 2> > X_nodes(num_active_patch_elems);
+
             // Setup vectors to store the values of F_JxW and X at the
             // quadrature points.
             unsigned int n_qp_patch = 0;
@@ -801,13 +877,13 @@ FEDataManager::spread(const int f_data_idx,
             {
                 Elem* const elem = patch_elems[e_idx];
                 const auto& X_dof_indices = X_dof_map_cache.dof_indices(elem);
-                get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
+                get_values_for_interpolation(X_nodes[e_idx], *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type key = getQuadratureKey(spread_spec.quad_type,
                                                            spread_spec.quad_order,
                                                            spread_spec.use_adaptive_quadrature,
                                                            spread_spec.point_density,
                                                            elem,
-                                                           X_node,
+                                                           X_nodes[e_idx],
                                                            patch_dx_min);
                 quad_keys[e_idx] = key;
                 QBase& qrule = d_quadrature_cache[key];
@@ -819,20 +895,18 @@ FEDataManager::spread(const int f_data_idx,
 
             // Loop over the elements and compute the values to be spread and
             // the positions of the quadrature points.
-            unsigned int qp_offset = 0;
+            int qp_offset = 0;
             std::set<quad_key_type> used_quadratures;
             for (unsigned int e_idx = 0; e_idx < num_active_patch_elems; ++e_idx)
             {
                 Elem* const elem = patch_elems[e_idx];
                 const auto& F_dof_indices = F_dof_map_cache.dof_indices(elem);
                 get_values_for_interpolation(F_node, *F_petsc_vec, F_local_soln, F_dof_indices);
-                const auto& X_dof_indices = X_dof_map_cache.dof_indices(elem);
-                get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
-                const quad_key_type& key = quad_keys[e_idx];
-                FEBase& X_fe = X_fe_cache[key];
-                FEBase& F_fe = F_fe_cache[key];
-                FEMap& fe_map = fe_map_cache[key];
-                QBase& qrule = d_quadrature_cache[key];
+                const quad_key_type &key = quad_keys[e_idx];
+                FEBase &X_fe = X_fe_cache[key];
+                FEBase &F_fe = F_fe_cache[key];
+                FEMap &fe_map = fe_map_cache[key];
+                QBase &qrule = d_quadrature_cache[key];
 
                 // See the note in interpWeighted to explain why we override
                 // libMesh's reinit logic here
@@ -859,26 +933,9 @@ FEDataManager::spread(const int f_data_idx,
                 double* X_begin = &X_qp[NDIM * qp_offset];
                 std::fill(F_begin, F_begin + n_vars * n_qp, 0.0);
                 std::fill(X_begin, X_begin + NDIM * n_qp, 0.0);
-                for (unsigned int k = 0; k < F_dof_indices[0].size(); ++k)
-                {
-                    for (unsigned int qp = 0; qp < n_qp; ++qp)
-                    {
-                        for (unsigned int i = 0; i < n_vars; ++i)
-                        {
-                            F_JxW_qp[n_vars * (qp_offset + qp) + i] += F_node[k][i] * phi_F[k][qp] * JxW_F[qp];
-                        }
-                    }
-                }
-                for (unsigned int k = 0; k < X_dof_indices[0].size(); ++k)
-                {
-                    for (unsigned int qp = 0; qp < n_qp; ++qp)
-                    {
-                        for (unsigned int i = 0; i < NDIM; ++i)
-                        {
-                            X_qp[NDIM * (qp_offset + qp) + i] += X_node[k][i] * phi_X[k][qp];
-                        }
-                    }
-                }
+
+                sum_weighted_elem_solution</*weights_are_unity*/ false>(n_vars, F_dof_indices[0].size(), qp_offset, phi_F, JxW_F, F_node, F_JxW_qp);
+                sum_weighted_elem_solution</*weights_are_unity*/ true>(NDIM, phi_X.size(), qp_offset, phi_X, {}, X_nodes[e_idx], X_qp);
                 qp_offset += n_qp;
             }
 
@@ -916,12 +973,6 @@ FEDataManager::spread(const int f_data_idx,
     // Accumulate data.
     f_data_ops->swapData(f_copy_data_idx, f_data_idx);
     f_data_ops->add(f_data_idx, f_data_idx, f_copy_data_idx);
-    for (int ln = coarsest_ln; ln <= finest_ln; ++ln)
-    {
-        Pointer<PatchLevel<NDIM> > level = d_hierarchy->getPatchLevel(ln);
-        level->deallocatePatchData(f_copy_data_idx);
-    }
-    var_db->removePatchDataIndex(f_copy_data_idx);
 
     IBTK_TIMER_STOP(t_spread);
     return;
@@ -1136,6 +1187,144 @@ FEDataManager::prolongData(const int f_data_idx,
     return;
 } // prolongData
 
+/**
+ * @brief Assemble the element contribution to a load vector.
+ *
+ * The three functions below allow compile-time selection of the number of
+ * basis functions and number of variables. Fixing the loop bounds via
+ * templates and switch statements makes most IBFE codes a few percent faster.
+ *
+ * This function (the last of the three) takes the number of variables and
+ * number of basis functions as template argument which allows the compiler to
+ * unroll the two inner loops when appropriate. Setting either value to -1
+ * results in run-time selection of loop bounds (which is considerably
+ * slower).
+ *
+ * @param[in] qp_offset Offset used to calculate an index into @p F_qp. The
+ * relevant part of the array is assumed to start at <code>n_vars *
+ * qp_offset</code>.
+ *
+ * @param[in] phi_F Values of test functions evaluated at quadrature points,
+ * indexed by test function number and then quadrature point number.
+ *
+ * @param[in] JxW_F Products of Jacobian and quadrature weight at each
+ * quadrature point.
+ *
+ * @param[in] F_qp Globally indexed array containing function values at
+ * quadrature points. The array is indexed by quadrature point and then by
+ * variable: i.e., if @p n_vars is greater than one then components of the
+ * vector-valued function being projected at a certain quadrature point are
+ * contiguous.
+ *
+ * @param[out] F_rhs_concatenated Vector containing element integrals of
+ * products of test functions and values of the interpolated function. Unlike
+ * @p F_qp, the values in this vector are first indexed by variable and then
+ * by quadrature point.
+ */
+template <int n_vars, int n_basis>
+void
+integrate_elem_rhs_n_vars_n_basis(const int qp_offset,
+                                  const std::vector<std::vector<double> >& phi_F,
+                                  const std::vector<double>& JxW_F,
+                                  const std::vector<double>& F_qp,
+                                  std::vector<double>& F_rhs_concatenated)
+{
+    const int n_qp = phi_F[0].size();
+    if (n_vars == -1 || n_basis == -1)
+    {
+        const int n_basis_ = phi_F.size();
+        const int n_vars_ = F_rhs_concatenated.size() / n_basis_;
+        for (int qp = 0; qp < n_qp; ++qp)
+        {
+            const int idx = n_vars_ * (qp_offset + qp);
+            for (int k = 0; k < n_basis_; ++k)
+            {
+                const double p_JxW_F = phi_F[k][qp] * JxW_F[qp];
+                for (int i = 0; i < n_vars_; ++i) F_rhs_concatenated[n_basis_ * i + k] += F_qp[idx + i] * p_JxW_F;
+            }
+        }
+    }
+    else
+    {
+        for (int qp = 0; qp < n_qp; ++qp)
+        {
+            const int idx = n_vars * (qp_offset + qp);
+            for (int k = 0; k < n_basis; ++k)
+            {
+                const double p_JxW_F = phi_F[k][qp] * JxW_F[qp];
+                for (int i = 0; i < n_vars; ++i) F_rhs_concatenated[n_basis * i + k] += F_qp[idx + i] * p_JxW_F;
+            }
+        }
+    }
+}
+
+// Dispatch to the above function based on the number of variables and number
+// of basis functions.
+template <int n_vars>
+void
+integrate_elem_rhs_n_vars(const int n_basis,
+                          const int qp_offset,
+                          const std::vector<std::vector<double> >& phi_F,
+                          const std::vector<double>& JxW_F,
+                          const std::vector<double>& F_qp,
+                          std::vector<double>& F_rhs_concatenated)
+{
+    switch (n_basis)
+    {
+#define SWITCH_CASE(k)                                                                                                 \
+    case k:                                                                                                            \
+    {                                                                                                                  \
+        integrate_elem_rhs_n_vars_n_basis<n_vars, k>(qp_offset, phi_F, JxW_F, F_qp, F_rhs_concatenated);               \
+        return;                                                                                                        \
+    }
+        SWITCH_CASE(1)
+        SWITCH_CASE(2)
+        SWITCH_CASE(3)
+        SWITCH_CASE(4)
+        SWITCH_CASE(5)
+        SWITCH_CASE(6)
+        SWITCH_CASE(8)
+        SWITCH_CASE(9)
+        SWITCH_CASE(10)
+        SWITCH_CASE(27)
+#undef SWITCH_CASE
+    default:
+        integrate_elem_rhs_n_vars_n_basis<n_vars, -1>(qp_offset, phi_F, JxW_F, F_qp, F_rhs_concatenated);
+        return;
+    }
+    return;
+}
+
+// Dispatch to the above function based on the number of variables.
+void
+integrate_elem_rhs(const int n_vars,
+                   const int n_basis,
+                   const int qp_offset,
+                   const std::vector<std::vector<double> >& phi_F,
+                   const std::vector<double>& JxW_F,
+                   const std::vector<double>& F_qp,
+                   std::vector<double>& F_rhs_concatenated)
+{
+    switch (n_vars)
+    {
+#define SWITCH_CASE(k)                                                                                                 \
+    case k:                                                                                                            \
+    {                                                                                                                  \
+        integrate_elem_rhs_n_vars<k>(n_basis, qp_offset, phi_F, JxW_F, F_qp, F_rhs_concatenated);                      \
+        return;                                                                                                        \
+    }
+        SWITCH_CASE(1)
+        SWITCH_CASE(2)
+        SWITCH_CASE(3)
+        SWITCH_CASE(4)
+        SWITCH_CASE(5)
+#undef SWITCH_CASE
+    default:
+        integrate_elem_rhs_n_vars<-1>(n_basis, qp_offset, phi_F, JxW_F, F_qp, F_rhs_concatenated);
+    }
+    return;
+}
+
 void
 FEDataManager::interpWeighted(const int f_data_idx,
                               NumericVector<double>& F_vec,
@@ -1332,15 +1521,32 @@ FEDataManager::interpWeighted(const int f_data_idx,
     else
     {
         // Extract local form vectors.
-        auto X_petsc_vec = static_cast<PetscVector<double>*>(&X_vec);
+        auto X_petsc_vec = dynamic_cast<PetscVector<double>*>(&X_vec);
+        TBOX_ASSERT(X_petsc_vec != nullptr);
         const double* const X_local_soln = X_petsc_vec->get_array_read();
+        // Since we do a lot of assembly in this routine into off-processor
+        // entries we will directly insert into the ghost values (and then
+        // scatter in the calling function with the usual batch function).
+        F_vec.zero();
+        auto F_petsc_vec = dynamic_cast<PetscVector<double>*>(&F_vec);
+        Vec F_local_form = nullptr;
+        double *F_local_soln = nullptr;
+        const bool is_ghosted = F_vec.type() == GHOSTED;
+        if (is_ghosted)
+        {
+            TBOX_ASSERT(F_petsc_vec != nullptr);
+            int ierr = VecGhostGetLocalForm(F_petsc_vec->vec(), &F_local_form);
+            IBTK_CHKERRQ(ierr);
+            ierr = VecGetArray(F_local_form, &F_local_soln);
+            IBTK_CHKERRQ(ierr);
+        }
 
         // Loop over the patches to interpolate values to the element quadrature
         // points from the grid, then use these values to compute the projection
         // of the interpolated velocity field onto the FE basis functions.
-        F_vec.zero();
-        std::vector<DenseVector<double> > F_rhs_e(n_vars);
-        boost::multi_array<double, 2> X_node;
+        DenseVector<double> F_rhs;
+        // Assemble F_rhs_e's vectors in an interleaved format (see the implementation):
+        std::vector<double> F_rhs_concatenated;
         std::vector<double> F_qp, X_qp;
         int local_patch_num = 0;
         std::vector<libMesh::dof_id_type> dof_id_scratch;
@@ -1360,6 +1566,9 @@ FEDataManager::interpWeighted(const int f_data_idx,
             // processor is surprisingly expensive, so cache the keys:
             std::vector<quad_key_type> quad_keys(num_active_patch_elems);
 
+            // Cache interpolated positions too:
+            std::vector<boost::multi_array<double, 2> > X_nodes(num_active_patch_elems);
+
             // Setup vectors to store the values of F and X at the quadrature
             // points.
             unsigned int n_qp_patch = 0;
@@ -1367,13 +1576,13 @@ FEDataManager::interpWeighted(const int f_data_idx,
             {
                 Elem* const elem = patch_elems[e_idx];
                 const auto& X_dof_indices = X_dof_map_cache.dof_indices(elem);
-                get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
+                get_values_for_interpolation(X_nodes[e_idx], *X_petsc_vec, X_local_soln, X_dof_indices);
                 const quad_key_type key = getQuadratureKey(interp_spec.quad_type,
                                                            interp_spec.quad_order,
                                                            interp_spec.use_adaptive_quadrature,
                                                            interp_spec.point_density,
                                                            elem,
-                                                           X_node,
+                                                           X_nodes[e_idx],
                                                            patch_dx_min);
                 QBase& qrule = d_quadrature_cache[key];
                 n_qp_patch += qrule.n_points();
@@ -1386,16 +1595,14 @@ FEDataManager::interpWeighted(const int f_data_idx,
 
             // Loop over the elements and compute the positions of the
             // quadrature points.
-            unsigned int qp_offset = 0;
+            int qp_offset = 0;
             std::set<quad_key_type> used_X_quadratures;
             for (unsigned int e_idx = 0; e_idx < num_active_patch_elems; ++e_idx)
             {
                 Elem* const elem = patch_elems[e_idx];
-                const auto& X_dof_indices = X_dof_map_cache.dof_indices(elem);
-                get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
-                const quad_key_type& key = quad_keys[e_idx];
-                QBase& qrule = d_quadrature_cache[key];
-                FEBase& X_fe = X_fe_cache[key];
+                const quad_key_type &key = quad_keys[e_idx];
+                QBase &qrule = d_quadrature_cache[key];
+                FEBase &X_fe = X_fe_cache[key];
 
                 // libMesh::FE defaults to recalculating *everything* when we
                 // call reinit unless we first request things (see
@@ -1428,7 +1635,7 @@ FEDataManager::interpWeighted(const int f_data_idx,
                         const double& p_X = phi_X[k][qp];
                         for (unsigned int i = 0; i < NDIM; ++i)
                         {
-                            X_qp[NDIM * (qp_offset + qp) + i] += X_node[k][i] * p_X;
+                            X_qp[NDIM * (qp_offset + qp) + i] += X_nodes[e_idx][k][i] * p_X;
                         }
                     }
                 }
@@ -1462,12 +1669,15 @@ FEDataManager::interpWeighted(const int f_data_idx,
             {
                 Elem* const elem = patch_elems[e_idx];
                 const auto& F_dof_indices = F_dof_map_cache.dof_indices(elem);
+                // check the concatenation assumption
+#ifndef NDEBUG
                 for (unsigned int i = 0; i < n_vars; ++i)
                 {
-                    F_rhs_e[i].resize(static_cast<int>(F_dof_indices[i].size()));
+                    TBOX_ASSERT(F_dof_indices[i].size() == F_dof_indices[0].size());
                 }
-                const auto& X_dof_indices = X_dof_map_cache.dof_indices(elem);
-                get_values_for_interpolation(X_node, *X_petsc_vec, X_local_soln, X_dof_indices);
+#endif
+                F_rhs_concatenated.resize(n_vars * F_dof_indices[0].size());
+                std::fill(F_rhs_concatenated.begin(), F_rhs_concatenated.end(), 0.0);
                 const quad_key_type& key = quad_keys[e_idx];
                 FEBase& F_fe = F_fe_cache[key];
                 FEMap& fe_map = fe_map_cache[key];
@@ -1492,23 +1702,31 @@ FEDataManager::interpWeighted(const int f_data_idx,
                 TBOX_ASSERT(n_qp == phi_F[0].size());
                 TBOX_ASSERT(n_qp == JxW_F.size());
                 const size_t n_basis = F_dof_indices[0].size();
-                for (unsigned int qp = 0; qp < n_qp; ++qp)
-                {
-                    const int idx = n_vars * (qp_offset + qp);
-                    for (unsigned int k = 0; k < n_basis; ++k)
-                    {
-                        const double p_JxW_F = phi_F[k][qp] * JxW_F[qp];
-                        for (unsigned int i = 0; i < n_vars; ++i)
-                        {
-                            F_rhs_e[i](k) += F_qp[idx + i] * p_JxW_F;
-                        }
-                    }
-                }
+                integrate_elem_rhs(n_vars, n_basis, qp_offset, phi_F, JxW_F, F_qp, F_rhs_concatenated);
+
                 for (unsigned int i = 0; i < n_vars; ++i)
                 {
+                    // libMesh sometimes resizes F_rhs inside
+                    // constrain_element_vector, so ensure it has the right size:
+                    F_rhs.resize(F_dof_indices[i].size());
+                    std::copy(F_rhs_concatenated.begin() + i * n_basis,
+                              F_rhs_concatenated.begin() + (i + 1) * n_basis,
+                              F_rhs.get_values().begin());
+
                     dof_id_scratch = F_dof_indices[i];
-                    F_dof_map.constrain_element_vector(F_rhs_e[i], dof_id_scratch);
-                    F_vec.add_vector(F_rhs_e[i], dof_id_scratch);
+                    F_dof_map.constrain_element_vector(F_rhs, dof_id_scratch);
+                    if (is_ghosted)
+                    {
+                        for (unsigned int i = 0; i < dof_id_scratch.size(); ++i)
+                        {
+                            F_local_soln[F_petsc_vec->map_global_to_local_index(dof_id_scratch[i])]
+                                += F_rhs(i);
+                        }
+                    }
+                    else
+                    {
+                        F_vec.add_vector(F_rhs, dof_id_scratch);
+                    }
                 }
                 qp_offset += n_qp;
             }
@@ -1516,6 +1734,21 @@ FEDataManager::interpWeighted(const int f_data_idx,
 
         // Restore local form vectors.
         X_petsc_vec->restore_array();
+        if (is_ghosted)
+        {
+            int ierr = VecRestoreArray(F_local_form, &F_local_soln);
+            IBTK_CHKERRQ(ierr);
+            ierr = VecGhostRestoreLocalForm(F_petsc_vec->vec(), &F_local_form);
+            IBTK_CHKERRQ(ierr);
+
+            if (close_F)
+            {
+                ierr = VecGhostUpdateBegin(F_petsc_vec->vec(), ADD_VALUES, SCATTER_REVERSE);
+                IBTK_CHKERRQ(ierr);
+                ierr = VecGhostUpdateEnd(F_petsc_vec->vec(), ADD_VALUES, SCATTER_REVERSE);
+                IBTK_CHKERRQ(ierr);
+            }
+        }
     }
 
     // Accumulate data.
@@ -1786,9 +2019,11 @@ FEDataManager::buildL2ProjectionSolver(const std::string& system_name)
 
     if (!d_L2_proj_solver.count(system_name) || !d_L2_proj_matrix.count(system_name))
     {
-        plog << "FEDataManager::buildL2ProjectionSolver(): building L2 projection solver for "
-                "system: "
-             << system_name << "\n";
+        if (d_enable_logging)
+        {
+            plog << "FEDataManager::buildL2ProjectionSolver(): building L2 projection solver for system: "
+                 << system_name << "\n";
+        }
 
         // Extract the mesh.
         const MeshBase& mesh = d_es->get_mesh();
@@ -1859,19 +2094,20 @@ FEDataManager::buildL2ProjectionSolver(const std::string& system_name)
             Elem* const elem = *el_it;
             for (unsigned int side = 0; side < elem->n_sides(); ++side)
             {
-                if (elem->neighbor(side)) continue;
-                static const short int dirichlet_bdry_id_set[3] = { ZERO_DISPLACEMENT_X_BDRY_ID,
-                                                                    ZERO_DISPLACEMENT_Y_BDRY_ID,
-                                                                    ZERO_DISPLACEMENT_Z_BDRY_ID };
-                const short int dirichlet_bdry_ids =
-                    get_dirichlet_bdry_ids(mesh.boundary_info->boundary_ids(elem, side));
+                if (elem->neighbor_ptr(side)) continue;
+                static const boundary_id_type dirichlet_bdry_id_set[3] = { ZERO_DISPLACEMENT_X_BDRY_ID,
+                                                                           ZERO_DISPLACEMENT_Y_BDRY_ID,
+                                                                           ZERO_DISPLACEMENT_Z_BDRY_ID };
+                std::vector<boundary_id_type> bdry_ids;
+                mesh.boundary_info->boundary_ids(elem, side, bdry_ids);
+                const boundary_id_type dirichlet_bdry_ids = get_dirichlet_bdry_ids(bdry_ids);
                 if (!dirichlet_bdry_ids) continue;
                 fe->reinit(elem);
                 for (unsigned int n = 0; n < elem->n_nodes(); ++n)
                 {
                     if (elem->is_node_on_side(n, side))
                     {
-                        Node* node = elem->get_node(n);
+                        const Node* const node = elem->node_ptr(n);
                         const auto& dof_indices = dof_map_cache.dof_indices(elem);
                         for (unsigned int var_num = 0; var_num < dof_map.n_variables(); ++var_num)
                         {
@@ -1915,10 +2151,11 @@ FEDataManager::buildDiagonalL2MassMatrix(const std::string& system_name)
 
     if (!d_L2_proj_matrix_diag.count(system_name))
     {
-        plog << "FEDataManager::buildDiagonalL2MassMatrix(): building diagonal L2 mass matrix "
-                "for "
-                "system: "
-             << system_name << "\n";
+        if (d_enable_logging)
+        {
+            plog << "FEDataManager::buildDiagonalL2MassMatrix(): building diagonal L2 mass matrix for system: "
+                 << system_name << "\n";
+        }
 
         // Extract the mesh.
         const MeshBase& mesh = d_es->get_mesh();
@@ -1992,19 +2229,20 @@ FEDataManager::buildDiagonalL2MassMatrix(const std::string& system_name)
             Elem* const elem = *el_it;
             for (unsigned int side = 0; side < elem->n_sides(); ++side)
             {
-                if (elem->neighbor(side)) continue;
-                static const short int dirichlet_bdry_id_set[3] = { ZERO_DISPLACEMENT_X_BDRY_ID,
-                                                                    ZERO_DISPLACEMENT_Y_BDRY_ID,
-                                                                    ZERO_DISPLACEMENT_Z_BDRY_ID };
-                const short int dirichlet_bdry_ids =
-                    get_dirichlet_bdry_ids(mesh.boundary_info->boundary_ids(elem, side));
+                if (elem->neighbor_ptr(side)) continue;
+                static const boundary_id_type dirichlet_bdry_id_set[3] = { ZERO_DISPLACEMENT_X_BDRY_ID,
+                                                                           ZERO_DISPLACEMENT_Y_BDRY_ID,
+                                                                           ZERO_DISPLACEMENT_Z_BDRY_ID };
+                std::vector<boundary_id_type> bdry_ids;
+                mesh.boundary_info->boundary_ids(elem, side, bdry_ids);
+                const boundary_id_type dirichlet_bdry_ids = get_dirichlet_bdry_ids(bdry_ids);
                 if (!dirichlet_bdry_ids) continue;
                 fe->reinit(elem);
                 for (unsigned int n = 0; n < elem->n_nodes(); ++n)
                 {
                     if (elem->is_node_on_side(n, side))
                     {
-                        Node* node = elem->get_node(n);
+                        const Node* const node = elem->node_ptr(n);
                         for (unsigned int var_num = 0; var_num < dof_map.n_variables(); ++var_num)
                         {
                             const unsigned int n_comp = node->n_comp(sys_num, var_num);
@@ -2561,29 +2799,23 @@ FEDataManager::updateQuadPointCountData(const int coarsest_ln, const int finest_
             const int current_rank = SAMRAI::tbox::SAMRAI_MPI::getRank();
             const auto right_padding = std::size_t(std::log10(n_processes)) + 1;
 
-            std::vector<int> pids(n_processes);
-            pids[current_rank] = getpid();
-            int ierr = MPI_Allreduce(
-                MPI_IN_PLACE, pids.data(), pids.size(), MPI_INT, MPI_SUM, SAMRAI::tbox::SAMRAI_MPI::commWorld);
-            TBOX_ASSERT(ierr == 0);
-
             std::vector<unsigned long> n_q_points_on_processors(n_processes);
             n_q_points_on_processors[current_rank] = n_local_q_points;
 
-            ierr = MPI_Allreduce(MPI_IN_PLACE,
-                                 n_q_points_on_processors.data(),
-                                 n_q_points_on_processors.size(),
-                                 MPI_UNSIGNED_LONG,
-                                 MPI_SUM,
-                                 SAMRAI::tbox::SAMRAI_MPI::commWorld);
+            const int ierr = MPI_Allreduce(
+                MPI_IN_PLACE, n_q_points_on_processors.data(),
+                n_q_points_on_processors.size(), MPI_UNSIGNED_LONG,
+                MPI_SUM, SAMRAI::tbox::SAMRAI_MPI::commWorld);
             TBOX_ASSERT(ierr == 0);
             if (current_rank == 0)
             {
                 for (int rank = 0; rank < n_processes; ++rank)
                 {
-                    SAMRAI::tbox::plog << "quadrature points on processor " << std::setw(right_padding) << std::left
-                                       << rank << " = " << n_q_points_on_processors[rank] << " (pid is " << pids[rank]
-                                       << ")\n";
+                    SAMRAI::tbox::plog << "quadrature points on processor "
+                                       << std::setw(right_padding) << std::left << rank
+                                       << " = "
+                                       << n_q_points_on_processors[rank]
+                                       << '\n';
                 }
             }
         }
@@ -2625,7 +2857,7 @@ FEDataManager::computeActiveElementBoundingBoxes()
         dof_indices.clear();
         for (unsigned int k = 0; k < n_nodes; ++k)
         {
-            Node* node = elem->get_node(k);
+            const Node* const node = elem->node_ptr(k);
             for (unsigned int d = 0; d < NDIM; ++d)
             {
                 TBOX_ASSERT(node->n_dofs(X_sys_num, d) == 1);
@@ -2844,7 +3076,7 @@ FEDataManager::collectActivePatchElements(std::vector<std::vector<Elem*> >& acti
             {
                 for (unsigned int n = 0; n < elem->n_neighbors(); ++n)
                 {
-                    Elem* const nghbr_elem = elem->neighbor(n);
+                    Elem* const nghbr_elem = elem->neighbor_ptr(n);
                     if (nghbr_elem)
                     {
                         const bool is_local_elem = local_elems.find(nghbr_elem) != local_elems.end();
@@ -2958,7 +3190,7 @@ FEDataManager::collectGhostDOFIndices(std::vector<unsigned int>& ghost_dofs,
         // DOFs associated with the nodes of the element.
         for (unsigned int k = 0; k < elem->n_nodes(); ++k)
         {
-            Node* node = elem->get_node(k);
+            const Node* const node = elem->node_ptr(k);
             for (unsigned int var_num = 0; var_num < node->n_vars(sys_num); ++var_num)
             {
                 if (node->n_dofs(sys_num, var_num) > 0)

@@ -43,8 +43,6 @@
 #include <utility>
 #include <vector>
 
-#include <unistd.h>
-
 #include "BasePatchHierarchy.h"
 #include "BasePatchLevel.h"
 #include "Box.h"
@@ -146,10 +144,10 @@ namespace
 // Version of IBFEMethod restart file data.
 static const int IBFE_METHOD_VERSION = 1;
 
-inline short int
-get_dirichlet_bdry_ids(const std::vector<short int>& bdry_ids)
+inline boundary_id_type
+get_dirichlet_bdry_ids(const std::vector<boundary_id_type>& bdry_ids)
 {
-    short int dirichlet_bdry_ids = 0;
+    boundary_id_type dirichlet_bdry_ids = 0;
     for (const auto& bdry_id : bdry_ids)
     {
         if (bdry_id == FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID ||
@@ -172,8 +170,9 @@ is_physical_bdry(const Elem* elem,
                  const BoundaryInfo& boundary_info,
                  const DofMap& dof_map)
 {
-    const std::vector<short int>& bdry_ids = boundary_info.boundary_ids(elem, side);
-    bool at_physical_bdry = !elem->neighbor(side);
+    std::vector<boundary_id_type> bdry_ids;
+    boundary_info.boundary_ids(elem, side, bdry_ids);
+    bool at_physical_bdry = !elem->neighbor_ptr(side);
     for (const auto& bdry_id : bdry_ids)
     {
         if (dof_map.is_periodic_boundary(bdry_id)) at_physical_bdry = false;
@@ -188,7 +187,8 @@ is_dirichlet_bdry(const Elem* elem,
                   const DofMap& dof_map)
 {
     if (!is_physical_bdry(elem, side, boundary_info, dof_map)) return false;
-    const std::vector<short int>& bdry_ids = boundary_info.boundary_ids(elem, side);
+    std::vector<boundary_id_type> bdry_ids;
+    boundary_info.boundary_ids(elem, side, bdry_ids);
     return get_dirichlet_bdry_ids(bdry_ids) != 0;
 }
 
@@ -803,12 +803,14 @@ IBFEMethod::preprocessIntegrateData(double current_time, double new_time, int nu
         d_X_rhs_vecs[part] = dynamic_cast<PetscVector<double>*>(d_X_systems[part]->rhs);
         d_X_new_vecs[part] = dynamic_cast<PetscVector<double>*>(d_X_systems[part]->request_vector("new"));
         d_X_half_vecs[part] = dynamic_cast<PetscVector<double>*>(d_X_systems[part]->request_vector("half"));
-        d_X_IB_ghost_vecs[part] = dynamic_cast<PetscVector<double>*>(
-            d_fe_data_managers[part]->buildGhostedCoordsVector(/*localize_data*/ false));
+        d_X_IB_ghost_vecs[part] = d_X_IB_solution_vecs[part].get();
 
         d_U_systems[part] = &d_equation_systems[part]->get_system<ExplicitSystem>(VELOCITY_SYSTEM_NAME);
         d_U_current_vecs[part] = dynamic_cast<PetscVector<double>*>(d_U_systems[part]->current_local_solution.get());
-        d_U_rhs_vecs[part] = dynamic_cast<PetscVector<double>*>(d_U_systems[part]->rhs);
+        if (d_use_ghosted_velocity_rhs)
+            d_U_rhs_vecs[part] = d_U_IB_rhs_vecs[part].get();
+        else
+            d_U_rhs_vecs[part] = dynamic_cast<PetscVector<double>*>(d_U_systems[part]->rhs);
         d_U_new_vecs[part] = dynamic_cast<PetscVector<double>*>(d_U_systems[part]->request_vector("new"));
         d_U_half_vecs[part] = dynamic_cast<PetscVector<double>*>(d_U_systems[part]->request_vector("half"));
 
@@ -816,16 +818,14 @@ IBFEMethod::preprocessIntegrateData(double current_time, double new_time, int nu
         d_F_half_vecs[part] = dynamic_cast<PetscVector<double>*>(d_F_systems[part]->current_local_solution.get());
         d_F_rhs_vecs[part] = dynamic_cast<PetscVector<double>*>(d_F_systems[part]->rhs);
         d_F_tmp_vecs[part] = dynamic_cast<PetscVector<double>*>(d_F_systems[part]->request_vector("tmp"));
-        d_F_IB_ghost_vecs[part] = dynamic_cast<PetscVector<double>*>(
-            d_fe_data_managers[part]->buildGhostedSolutionVector(FORCE_SYSTEM_NAME, /*localize_data*/ false));
+        d_F_IB_ghost_vecs[part] = d_F_IB_solution_vecs[part].get();
 
         if (d_lag_body_source_part[part])
         {
             d_Q_systems[part] = &d_equation_systems[part]->get_system<ExplicitSystem>(SOURCE_SYSTEM_NAME);
             d_Q_half_vecs[part] = dynamic_cast<PetscVector<double>*>(d_Q_systems[part]->current_local_solution.get());
             d_Q_rhs_vecs[part] = dynamic_cast<PetscVector<double>*>(d_Q_systems[part]->rhs);
-            d_Q_IB_ghost_vecs[part] = dynamic_cast<PetscVector<double>*>(
-                d_fe_data_managers[part]->buildGhostedSolutionVector(SOURCE_SYSTEM_NAME, /*localize_data*/ false));
+            d_Q_IB_ghost_vecs[part] = d_Q_IB_solution_vecs[part].get();
         }
 
         if (d_is_stress_normalization_part[part])
@@ -951,6 +951,7 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
     std::vector<PetscVector<double>*> U_vecs(d_num_parts), X_vecs(d_num_parts);
     for (unsigned int part = 0; part < d_num_parts; ++part)
     {
+        *d_U_rhs_vecs[part] = 0.0;
         if (MathUtilities<double>::equalEps(data_time, d_current_time))
         {
             U_vecs[part] = d_U_current_vecs[part];
@@ -990,7 +991,15 @@ IBFEMethod::interpolateVelocity(const int u_data_idx,
                                                  /*close_F*/ false,
                                                  /*close_X*/ false);
     }
-    batch_vec_assembly(d_U_rhs_vecs);
+    if (d_use_ghosted_velocity_rhs)
+    {
+        batch_vec_ghost_update(d_U_rhs_vecs, ADD_VALUES, SCATTER_REVERSE);
+        batch_vec_ghost_update(d_U_rhs_vecs, INSERT_VALUES, SCATTER_FORWARD);
+    }
+    else
+    {
+        batch_vec_assembly(d_U_rhs_vecs);
+    }
 
     // Solve for the interpolated data.
     for (unsigned int part = 0; part < d_num_parts; ++part)
@@ -1590,21 +1599,22 @@ IBFEMethod::doInitializeFEData(const bool use_present_data)
             Elem* const elem = *el_it;
             for (unsigned int side = 0; side < elem->n_sides(); ++side)
             {
-                const bool at_mesh_bdry = !elem->neighbor(side);
+                const bool at_mesh_bdry = !elem->neighbor_ptr(side);
                 if (!at_mesh_bdry) continue;
 
-                static const short int dirichlet_bdry_id_set[3] = { FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID,
-                                                                    FEDataManager::ZERO_DISPLACEMENT_Y_BDRY_ID,
-                                                                    FEDataManager::ZERO_DISPLACEMENT_Z_BDRY_ID };
-                const short int dirichlet_bdry_ids =
-                    get_dirichlet_bdry_ids(mesh.boundary_info->boundary_ids(elem, side));
+                static const boundary_id_type dirichlet_bdry_id_set[3] = { FEDataManager::ZERO_DISPLACEMENT_X_BDRY_ID,
+                                                                           FEDataManager::ZERO_DISPLACEMENT_Y_BDRY_ID,
+                                                                           FEDataManager::ZERO_DISPLACEMENT_Z_BDRY_ID };
+                std::vector<boundary_id_type> bdry_ids;
+                mesh.boundary_info->boundary_ids(elem, side, bdry_ids);
+                const boundary_id_type dirichlet_bdry_ids = get_dirichlet_bdry_ids(bdry_ids);
                 if (!dirichlet_bdry_ids) continue;
 
                 for (unsigned int n = 0; n < elem->n_nodes(); ++n)
                 {
                     if (!elem->is_node_on_side(n, side)) continue;
 
-                    Node* node = elem->get_node(n);
+                    const Node* const node = elem->node_ptr(n);
                     mesh.boundary_info->add_node(node, dirichlet_bdry_ids);
                     for (unsigned int d = 0; d < NDIM; ++d)
                     {
@@ -1630,6 +1640,28 @@ IBFEMethod::doInitializeFEData(const bool use_present_data)
     }
     return;
 } // doInitializeFEData
+
+
+void
+IBFEMethod::updateCachedIBGhostedVectors()
+{
+    d_F_IB_solution_vecs.resize(d_num_parts);
+    d_Q_IB_solution_vecs.resize(d_num_parts);
+    if (d_use_ghosted_velocity_rhs)
+        d_U_IB_rhs_vecs.resize(d_num_parts);
+    d_X_IB_solution_vecs.resize(d_num_parts);
+    for (unsigned int part = 0; part < d_num_parts; ++part)
+    {
+        d_F_IB_solution_vecs[part] = d_fe_data_managers[part]->buildIBGhostedVector(FORCE_SYSTEM_NAME);
+        if (d_lag_body_source_part[part])
+        {
+            d_Q_IB_solution_vecs[part] = d_fe_data_managers[part]->buildIBGhostedVector(SOURCE_SYSTEM_NAME);
+        }
+        if (d_use_ghosted_velocity_rhs)
+            d_U_IB_rhs_vecs[part] = d_fe_data_managers[part]->buildIBGhostedVector(VELOCITY_SYSTEM_NAME);
+        d_X_IB_solution_vecs[part] = d_fe_data_managers[part]->buildIBGhostedVector(COORDS_SYSTEM_NAME);
+    }
+}
 
 void
 IBFEMethod::registerEulerianVariables()
@@ -1665,6 +1697,7 @@ IBFEMethod::initializePatchHierarchy(Pointer<PatchHierarchy<NDIM> > hierarchy,
     {
         d_fe_data_managers[part]->reinitElementMappings();
     }
+    updateCachedIBGhostedVectors();
 
     d_is_initialized = true;
     return;
@@ -1693,31 +1726,26 @@ IBFEMethod::addWorkloadEstimate(Pointer<PatchHierarchy<NDIM> > hierarchy, const 
         const int n_processes = SAMRAI::tbox::SAMRAI_MPI::getNodes();
         const int current_rank = SAMRAI::tbox::SAMRAI_MPI::getRank();
 
-        std::vector<int> pids(n_processes);
-        pids[current_rank] = getpid();
-        int ierr = MPI_Allreduce(
-            MPI_IN_PLACE, pids.data(), pids.size(), MPI_INT, MPI_SUM, SAMRAI::tbox::SAMRAI_MPI::commWorld);
-        TBOX_ASSERT(ierr == 0);
-
         std::vector<double> workload_per_processor(n_processes);
         HierarchyCellDataOpsReal<NDIM, double> hier_cc_data_ops(hierarchy);
-        workload_per_processor[current_rank] = hier_cc_data_ops.L1Norm(d_workload_idx, -1, true);
+        workload_per_processor[current_rank] = hier_cc_data_ops.L1Norm(workload_data_idx, IBTK::invalid_index, true);
 
         const auto right_padding = std::size_t(std::log10(n_processes)) + 1;
 
-        ierr = MPI_Allreduce(MPI_IN_PLACE,
-                             workload_per_processor.data(),
-                             workload_per_processor.size(),
-                             MPI_DOUBLE,
-                             MPI_SUM,
-                             SAMRAI::tbox::SAMRAI_MPI::commWorld);
+        int ierr = MPI_Allreduce(
+            MPI_IN_PLACE, workload_per_processor.data(),
+            workload_per_processor.size(), MPI_DOUBLE,
+            MPI_SUM, SAMRAI::tbox::SAMRAI_MPI::commWorld);
         TBOX_ASSERT(ierr == 0);
         if (current_rank == 0)
         {
             for (int rank = 0; rank < n_processes; ++rank)
             {
-                SAMRAI::tbox::plog << "workload estimate on processor " << std::setw(right_padding) << std::left << rank
-                                   << " = " << long(workload_per_processor[rank]) << " (pid is " << pids[rank] << ")\n";
+                SAMRAI::tbox::plog << "workload estimate on processor "
+                                   << std::setw(right_padding) << std::left << rank
+                                   << " = "
+                                   << long(workload_per_processor[rank])
+                                   << '\n';
             }
         }
 
@@ -1742,8 +1770,11 @@ IBFEMethod::addWorkloadEstimate(Pointer<PatchHierarchy<NDIM> > hierarchy, const 
         {
             for (int rank = 0; rank < n_processes; ++rank)
             {
-                SAMRAI::tbox::plog << "local active DoFs on processor " << std::setw(right_padding) << std::left << rank
-                                   << " = " << dofs_per_processor[rank] << " (pid is " << pids[rank] << ")\n";
+                SAMRAI::tbox::plog << "local active DoFs on processor "
+                                   << std::setw(right_padding) << std::left << rank
+                                   << " = "
+                                   << dofs_per_processor[rank]
+                                   << '\n';
             }
         }
     }
@@ -1788,6 +1819,7 @@ void IBFEMethod::endDataRedistribution(Pointer<PatchHierarchy<NDIM> > /*hierarch
         {
             d_fe_data_managers[part]->reinitElementMappings();
         }
+        updateCachedIBGhostedVectors();
     }
     return;
 } // endDataRedistribution
@@ -1858,6 +1890,7 @@ IBFEMethod::putToDatabase(Pointer<Database> db)
     db->putBool("d_use_jump_conditions", d_use_jump_conditions);
     db->putBool("d_use_consistent_mass_matrix", d_use_consistent_mass_matrix);
     db->putString("d_libmesh_partitioner_type", enum_to_string<LibmeshPartitionerType>(d_libmesh_partitioner_type));
+    db->putDouble("workload_quad_point_weight", d_default_workload_spec.q_point_weight);
     return;
 } // putToDatabase
 
@@ -2846,7 +2879,6 @@ IBFEMethod::spreadTransmissionForceDensity(const int f_data_idx,
     FEDataInterpolation fe(dim, d_fe_data_managers[part]);
     std::unique_ptr<QBase> default_qrule_face =
         QBase::build(d_default_quad_type[part], dim - 1, d_default_quad_order[part]);
-    std::unique_ptr<QBase> qrule_face;
     fe.attachQuadratureRuleFace(default_qrule_face.get());
     fe.evalNormalsFace();
     fe.evalQuadraturePointsFace();
@@ -2908,6 +2940,8 @@ IBFEMethod::spreadTransmissionForceDensity(const int f_data_idx,
         T_bdry.clear();
         x_bdry.clear();
         int qp_offset = 0;
+
+        IBTK::QuadratureCache side_quad_cache(dim - 1);
         for (size_t e_idx = 0; e_idx < num_active_patch_elems; ++e_idx)
         {
             Elem* const elem = patch_elems[e_idx];
@@ -2918,6 +2952,26 @@ IBFEMethod::spreadTransmissionForceDensity(const int f_data_idx,
             fe.collectDataForInterpolation(elem);
             const boost::multi_array<double, 2>& X_node = fe.getElemData(elem, X_sys_idx);
 
+            // Set the length scale for each side (and, therefore, the quadrature
+            // rule) to be the same as the length scale for the element.
+            using quad_key_type = std::tuple<libMesh::ElemType, libMesh::QuadratureType, libMesh::Order>;
+            // This duplicates the logic in updateSpreadQuadratureRule so that
+            // we can get the key here
+            const quad_key_type elem_quad_key = getQuadratureKey(d_spread_spec[part].quad_type,
+                                                                 d_spread_spec[part].quad_order,
+                                                                 d_spread_spec[part].use_adaptive_quadrature,
+                                                                 d_spread_spec[part].point_density,
+                                                                 elem,
+                                                                 X_node,
+                                                                 patch_dx_min);
+            // TODO: surely there is a better way to get the type of a side
+            // than this!
+            std::unique_ptr<Elem> side_ptr = elem->build_side_ptr(0);
+            const quad_key_type side_quad_key = std::make_tuple(side_ptr->type(),
+                                                                d_spread_spec[part].quad_type,
+                                                                std::get<2>(elem_quad_key));
+            libMesh::QBase &side_quadrature = side_quad_cache[side_quad_key];
+
             // Loop over the element boundaries.
             for (unsigned short int side = 0; side < elem->n_sides(); ++side)
             {
@@ -2927,17 +2981,10 @@ IBFEMethod::spreadTransmissionForceDensity(const int f_data_idx,
                 // Skip Dirichlet boundaries.
                 if (is_dirichlet_bdry(elem, side, boundary_info, G_dof_map)) continue;
 
-                // Construct a side element.
-                std::unique_ptr<Elem> side_elem = elem->build_side(side, /*proxy*/ false);
-                const bool qrule_changed = d_fe_data_managers[part]->updateSpreadQuadratureRule(
-                    qrule_face, d_spread_spec[part], side_elem.get(), X_node, patch_dx_min);
-                if (qrule_changed)
-                {
-                    fe.attachQuadratureRuleFace(qrule_face.get());
-                }
+                fe.attachQuadratureRuleFace(&side_quadrature);
                 fe.reinit(elem, side);
                 fe.interpolate(elem, side);
-                const unsigned int n_qp = qrule_face->n_points();
+                const unsigned int n_qp = side_quadrature.n_points();
                 T_bdry.resize(T_bdry.size() + NDIM * n_qp);
                 x_bdry.resize(x_bdry.size() + NDIM * n_qp);
                 for (unsigned int qp = 0; qp < n_qp; ++qp, ++qp_offset)
@@ -3195,7 +3242,7 @@ IBFEMethod::imposeJumpConditions(const int f_data_idx,
                 if (is_dirichlet_bdry(elem, side, boundary_info, G_dof_map)) continue;
 
                 // Construct a side element.
-                std::unique_ptr<Elem> side_elem = elem->build_side(side, /*proxy*/ false);
+                std::unique_ptr<Elem> side_elem = elem->build_side_ptr(side, /*proxy*/ false);
                 const unsigned int n_node_side = side_elem->n_nodes();
                 for (int d = 0; d < NDIM; ++d)
                 {
@@ -3656,7 +3703,7 @@ IBFEMethod::commonConstructor(const std::string& object_name,
     // Set up the interaction spec objects.
     d_interp_spec.resize(d_num_parts, d_default_interp_spec);
     d_spread_spec.resize(d_num_parts, d_default_spread_spec);
-    d_workload_spec.resize(d_num_parts);
+    d_workload_spec.resize(d_num_parts, d_default_workload_spec);
 
     return;
 } // commonConstructor
@@ -3703,6 +3750,19 @@ IBFEMethod::getFromInput(Pointer<Database> db, bool /*is_from_restart*/)
         d_default_interp_spec.use_nodal_quadrature = db->getBool("interp_use_nodal_quadrature");
     else if (db->isBool("IB_use_nodal_quadrature"))
         d_default_interp_spec.use_nodal_quadrature = db->getBool("IB_use_nodal_quadrature");
+    if (db->isString("vector_assembly_accumulation"))
+    {
+        const std::string vector_assembly = db->getString("vector_assembly_accumulation");
+        if (vector_assembly == "GHOSTED")
+            d_use_ghosted_velocity_rhs = true;
+        else if (vector_assembly == "CACHED")
+            d_use_ghosted_velocity_rhs = false;
+        else
+        {
+            TBOX_ERROR(d_object_name << ": value " << vector_assembly << " for vector_assembly_accumulation should be "
+                                     << "either GHOSTED or CACHED." << std::endl);
+        }
+    }
 
     // Spreading settings.
     if (db->isString("spread_delta_fcn"))
@@ -3782,6 +3842,10 @@ IBFEMethod::getFromInput(Pointer<Database> db, bool /*is_from_restart*/)
     if (db->keyExists("libmesh_partitioner_type"))
     {
         d_libmesh_partitioner_type = string_to_enum<LibmeshPartitionerType>(db->getString("libmesh_partitioner_type"));
+    }
+    if (db->keyExists("workload_quad_point_weight"))
+    {
+        d_default_workload_spec.q_point_weight = db->getDouble("workload_quad_point_weight");
     }
     return;
 } // getFromInput

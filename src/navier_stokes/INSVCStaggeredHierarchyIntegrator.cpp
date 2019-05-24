@@ -115,7 +115,7 @@
 #include "ibtk/CCPoissonSolverManager.h"
 #include "ibtk/CartGridFunction.h"
 #include "ibtk/CartSideDoubleDivPreservingRefine.h"
-#include "ibtk/CartSideDoubleSpecializedConstantRefine.h"
+#include "ibtk/CartSideDoubleRT0Refine.h"
 #include "ibtk/CartSideDoubleSpecializedLinearRefine.h"
 #include "ibtk/CartSideRobinPhysBdryOp.h"
 #include "ibtk/CellNoCornersFillPattern.h"
@@ -324,9 +324,17 @@ INSVCStaggeredHierarchyIntegrator::INSVCStaggeredHierarchyIntegrator(std::string
     : INSHierarchyIntegrator(std::move(object_name),
                              input_db,
                              new SideVariable<NDIM, double>(object_name + "::U"),
+                             "CONSERVATIVE_COARSEN",
+                             "CONSERVATIVE_LINEAR_REFINE",
                              new CellVariable<NDIM, double>(object_name + "::P"),
+                             "CONSERVATIVE_COARSEN",
+                             "LINEAR_REFINE",
                              new SideVariable<NDIM, double>(object_name + "::F"),
+                             "CONSERVATIVE_COARSEN",
+                             "CONSERVATIVE_LINEAR_REFINE",
                              new CellVariable<NDIM, double>(object_name + "::Q"),
+                             "CONSERVATIVE_COARSEN",
+                             "CONSTANT_REFINE",
                              register_for_restart),
       d_rho_vc_interp_type(VC_HARMONIC_INTERP),
       d_mu_vc_interp_type(VC_HARMONIC_INTERP)
@@ -500,6 +508,19 @@ INSVCStaggeredHierarchyIntegrator::INSVCStaggeredHierarchyIntegrator(std::string
         d_U_bc_coefs[d] = new INSVCStaggeredVelocityBcCoef(d, this, d_bc_coefs, d_traction_bc_type);
     }
     d_P_bc_coef = new INSVCStaggeredPressureBcCoef(this, d_bc_coefs, d_traction_bc_type);
+
+    // Get coarsen and refine operator types.
+    if (input_db->keyExists("N_coarsen_type")) d_N_coarsen_type = input_db->getString("N_coarsen_type");
+    if (input_db->keyExists("N_refine_type")) d_N_refine_type = input_db->getString("N_refine_type");
+
+    if (input_db->keyExists("mu_coarsen_type")) d_mu_coarsen_type = input_db->getString("mu_coarsen_type");
+    if (input_db->keyExists("mu_refine_type")) d_mu_refine_type = input_db->getString("mu_refine_type");
+    if (input_db->keyExists("mu_bdry_extrap_type")) d_mu_bdry_extrap_type = input_db->getString("mu_bdry_extrap_type");
+
+    if (input_db->keyExists("rho_coarsen_type")) d_rho_coarsen_type = input_db->getString("rho_coarsen_type");
+    if (input_db->keyExists("rho_refine_type")) d_rho_refine_type = input_db->getString("rho_refine_type");
+    if (input_db->keyExists("rho_bdry_extrap_type"))
+        d_rho_bdry_extrap_type = input_db->getString("rho_bdry_extrap_type");
 
     // Initialize all variables.  The velocity, pressure, body force, and fluid
     // source variables were created above in the constructor for the
@@ -770,7 +791,7 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
     // Register state variables that are maintained by the
     // INSVCStaggeredHierarchyIntegrator.
     Pointer<CartesianGridGeometry<NDIM> > grid_geom = d_hierarchy->getGridGeometry();
-    grid_geom->addSpatialRefineOperator(new CartSideDoubleSpecializedConstantRefine());
+    grid_geom->addSpatialRefineOperator(new CartSideDoubleRT0Refine());
     grid_geom->addSpatialRefineOperator(new CartSideDoubleSpecializedLinearRefine());
 
     VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
@@ -795,8 +816,8 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
                      d_U_scratch_idx,
                      d_U_var,
                      side_ghosts,
-                     "CONSERVATIVE_COARSEN",
-                     "CONSERVATIVE_LINEAR_REFINE",
+                     d_U_coarsen_type,
+                     d_U_refine_type,
                      d_U_init);
 
     registerVariable(d_P_current_idx,
@@ -804,8 +825,8 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
                      d_P_scratch_idx,
                      d_P_var,
                      cell_ghosts,
-                     "CONSERVATIVE_COARSEN",
-                     "LINEAR_REFINE",
+                     d_P_coarsen_type,
+                     d_P_refine_type,
                      d_P_init);
 
     if (d_F_fcn)
@@ -815,8 +836,8 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
                          d_F_scratch_idx,
                          d_F_var,
                          side_ghosts,
-                         "CONSERVATIVE_COARSEN",
-                         "CONSERVATIVE_LINEAR_REFINE",
+                         d_F_coarsen_type,
+                         d_F_refine_type,
                          d_F_fcn);
     }
     else
@@ -833,8 +854,8 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
                          d_Q_scratch_idx,
                          d_Q_var,
                          cell_ghosts,
-                         "CONSERVATIVE_COARSEN",
-                         "CONSTANT_REFINE",
+                         d_Q_coarsen_type,
+                         d_Q_refine_type,
                          d_Q_fcn);
     }
     else
@@ -849,8 +870,8 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
                      d_N_old_scratch_idx,
                      d_N_old_var,
                      side_ghosts,
-                     "CONSERVATIVE_COARSEN",
-                     "CONSERVATIVE_LINEAR_REFINE");
+                     d_N_coarsen_type,
+                     d_N_refine_type);
 
     // Get the viscosity variable, which can either be an advected field maintained by
     // an appropriate advection-diffusion integrator, or a set field with some functional
@@ -895,8 +916,8 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
                          d_mu_scratch_idx,
                          d_mu_var,
                          mu_cell_ghosts,
-                         "CONSERVATIVE_COARSEN",
-                         "CONSERVATIVE_LINEAR_REFINE",
+                         d_mu_coarsen_type,
+                         d_mu_refine_type,
                          d_mu_init_fcn);
     }
     else
@@ -1072,7 +1093,7 @@ INSVCStaggeredHierarchyIntegrator::initializeHierarchyIntegrator(Pointer<PatchHi
 
     // Setup a specialized coarsen algorithm.
     Pointer<CoarsenAlgorithm<NDIM> > coarsen_alg = new CoarsenAlgorithm<NDIM>();
-    Pointer<CoarsenOperator<NDIM> > coarsen_op = grid_geom->lookupCoarsenOperator(d_U_var, "CONSERVATIVE_COARSEN");
+    Pointer<CoarsenOperator<NDIM> > coarsen_op = grid_geom->lookupCoarsenOperator(d_U_var, d_U_coarsen_type);
     coarsen_alg->registerCoarsen(d_U_scratch_idx, d_U_scratch_idx, coarsen_op);
     registerCoarsenAlgorithm(d_object_name + "::CONVECTIVE_OP", coarsen_alg);
 
@@ -1332,81 +1353,6 @@ INSVCStaggeredHierarchyIntegrator::postprocessIntegrateHierarchy(const double cu
 } // postprocessIntegrateHierarchy
 
 void
-INSVCStaggeredHierarchyIntegrator::regridHierarchy()
-{
-    const int coarsest_ln = 0;
-
-    // Determine the divergence of the velocity field before regridding.
-    d_hier_math_ops->div(d_Div_U_idx,
-                         d_Div_U_var,
-                         1.0,
-                         d_U_current_idx,
-                         d_U_var,
-                         d_no_fill_op,
-                         d_integrator_time,
-                         /*synch_cf_bdry*/ false,
-                         -1.0,
-                         d_Q_current_idx,
-                         d_Q_var);
-    const int wgt_cc_idx = d_hier_math_ops->getCellWeightPatchDescriptorIndex();
-    const double Div_U_norm_1_pre = d_hier_cc_data_ops->L1Norm(d_Div_U_idx, wgt_cc_idx);
-    const double Div_U_norm_2_pre = d_hier_cc_data_ops->L2Norm(d_Div_U_idx, wgt_cc_idx);
-    const double Div_U_norm_oo_pre = d_hier_cc_data_ops->maxNorm(d_Div_U_idx, wgt_cc_idx);
-
-    // Regrid the hierarchy.
-    switch (d_regrid_mode)
-    {
-    case STANDARD:
-        d_gridding_alg->regridAllFinerLevels(d_hierarchy, coarsest_ln, d_integrator_time, d_tag_buffer);
-        break;
-    case AGGRESSIVE:
-        for (int k = 0; k < d_gridding_alg->getMaxLevels(); ++k)
-        {
-            d_gridding_alg->regridAllFinerLevels(d_hierarchy, coarsest_ln, d_integrator_time, d_tag_buffer);
-        }
-        break;
-    default:
-        TBOX_ERROR(d_object_name << "::regridHierarchy():\n"
-                                 << "  unrecognized regrid mode: " << IBTK::enum_to_string<RegridMode>(d_regrid_mode)
-                                 << "." << std::endl);
-    }
-
-    // Determine the divergence of the velocity field after regridding.
-    d_hier_math_ops->div(d_Div_U_idx,
-                         d_Div_U_var,
-                         1.0,
-                         d_U_current_idx,
-                         d_U_var,
-                         d_no_fill_op,
-                         d_integrator_time,
-                         /*synch_cf_bdry*/ true,
-                         -1.0,
-                         d_Q_current_idx,
-                         d_Q_var);
-    const double Div_U_norm_1_post = d_hier_cc_data_ops->L1Norm(d_Div_U_idx, wgt_cc_idx);
-    const double Div_U_norm_2_post = d_hier_cc_data_ops->L2Norm(d_Div_U_idx, wgt_cc_idx);
-    const double Div_U_norm_oo_post = d_hier_cc_data_ops->maxNorm(d_Div_U_idx, wgt_cc_idx);
-
-    // Project the interpolated velocity if needed.
-    if (Div_U_norm_1_post > d_regrid_max_div_growth_factor * Div_U_norm_1_pre ||
-        Div_U_norm_2_post > d_regrid_max_div_growth_factor * Div_U_norm_2_pre ||
-        Div_U_norm_oo_post > d_regrid_max_div_growth_factor * Div_U_norm_oo_pre)
-    {
-        pout << d_object_name << "::regridHierarchy():\n"
-             << "  WARNING: projecting the interpolated velocity field\n";
-        regridProjection();
-    }
-
-    // Reinitialize composite grid data.
-    const bool initial_time = false;
-    initializeCompositeHierarchyData(d_integrator_time, initial_time);
-
-    // Synchronize the state data on the patch hierarchy.
-    synchronizeHierarchyData(CURRENT_DATA);
-    return;
-} // regridHierarchy
-
-void
 INSVCStaggeredHierarchyIntegrator::removeNullSpace(const Pointer<SAMRAIVectorReal<NDIM, double> >& sol_vec)
 {
     if (d_nul_vecs.empty()) return;
@@ -1540,6 +1486,61 @@ INSVCStaggeredHierarchyIntegrator::getTransportedViscosityVariable() const
 /////////////////////////////// PROTECTED ////////////////////////////////////
 
 void
+INSVCStaggeredHierarchyIntegrator::regridHierarchyBeginSpecialized()
+{
+    // Determine the divergence of the velocity field before regridding.
+    d_hier_math_ops->div(d_Div_U_idx,
+                         d_Div_U_var,
+                         1.0,
+                         d_U_current_idx,
+                         d_U_var,
+                         d_no_fill_op,
+                         d_integrator_time,
+                         /*synch_cf_bdry*/ false,
+                         -1.0,
+                         d_Q_current_idx,
+                         d_Q_var);
+    const int wgt_cc_idx = d_hier_math_ops->getCellWeightPatchDescriptorIndex();
+    d_div_U_norm_1_pre = d_hier_cc_data_ops->L1Norm(d_Div_U_idx, wgt_cc_idx);
+    d_div_U_norm_2_pre = d_hier_cc_data_ops->L2Norm(d_Div_U_idx, wgt_cc_idx);
+    d_div_U_norm_oo_pre = d_hier_cc_data_ops->maxNorm(d_Div_U_idx, wgt_cc_idx);
+
+    return;
+} // regridHierarchyBeginSpecialized
+
+void
+INSVCStaggeredHierarchyIntegrator::regridHierarchyEndSpecialized()
+{
+    const int wgt_cc_idx = d_hier_math_ops->getCellWeightPatchDescriptorIndex();
+    // Determine the divergence of the velocity field after regridding.
+    d_hier_math_ops->div(d_Div_U_idx,
+                         d_Div_U_var,
+                         1.0,
+                         d_U_current_idx,
+                         d_U_var,
+                         d_no_fill_op,
+                         d_integrator_time,
+                         /*synch_cf_bdry*/ true,
+                         -1.0,
+                         d_Q_current_idx,
+                         d_Q_var);
+    const double Div_U_norm_1_post = d_hier_cc_data_ops->L1Norm(d_Div_U_idx, wgt_cc_idx);
+    const double Div_U_norm_2_post = d_hier_cc_data_ops->L2Norm(d_Div_U_idx, wgt_cc_idx);
+    const double Div_U_norm_oo_post = d_hier_cc_data_ops->maxNorm(d_Div_U_idx, wgt_cc_idx);
+
+    // Project the interpolated velocity if needed.
+    if (Div_U_norm_1_post > d_regrid_max_div_growth_factor * d_div_U_norm_1_pre ||
+        Div_U_norm_2_post > d_regrid_max_div_growth_factor * d_div_U_norm_2_pre ||
+        Div_U_norm_oo_post > d_regrid_max_div_growth_factor * d_div_U_norm_oo_pre)
+    {
+        pout << d_object_name << "::regridHierarchy():\n"
+             << "  WARNING: projecting the interpolated velocity field\n";
+        regridProjection();
+    }
+    return;
+} // regridHierarchyEndSpecialized
+
+void
 INSVCStaggeredHierarchyIntegrator::initializeLevelDataSpecialized(
     const Pointer<BasePatchHierarchy<NDIM> > base_hierarchy,
     const int level_number,
@@ -1631,9 +1632,8 @@ INSVCStaggeredHierarchyIntegrator::initializeLevelDataSpecialized(
         RefineAlgorithm<NDIM> fill_div_free_prolongation;
         Pointer<CartesianGridGeometry<NDIM> > grid_geom = d_hierarchy->getGridGeometry();
         fill_div_free_prolongation.registerRefine(d_U_current_idx, d_U_current_idx, d_U_regrid_idx, nullptr);
-        Pointer<RefineOperator<NDIM> > refine_op =
-            grid_geom->lookupRefineOperator(d_U_var, "CONSERVATIVE_LINEAR_REFINE");
-        Pointer<CoarsenOperator<NDIM> > coarsen_op = grid_geom->lookupCoarsenOperator(d_U_var, "CONSERVATIVE_COARSEN");
+        Pointer<RefineOperator<NDIM> > refine_op = grid_geom->lookupRefineOperator(d_U_var, d_U_refine_type);
+        Pointer<CoarsenOperator<NDIM> > coarsen_op = grid_geom->lookupCoarsenOperator(d_U_var, d_U_coarsen_type);
         CartSideRobinPhysBdryOp phys_bdry_bc_op(d_U_regrid_idx, d_U_bc_coefs, false);
         CartSideDoubleDivPreservingRefine div_preserving_op(
             d_U_regrid_idx, d_U_src_idx, d_indicator_idx, refine_op, coarsen_op, init_data_time, &phys_bdry_bc_op);
@@ -1676,7 +1676,7 @@ INSVCStaggeredHierarchyIntegrator::initializeLevelDataSpecialized(
                                                              DATA_REFINE_TYPE,
                                                              USE_CF_INTERPOLATION,
                                                              DATA_COARSEN_TYPE,
-                                                             d_bdry_extrap_type,
+                                                             d_bdry_extrap_type, // TODO: update variable name
                                                              CONSISTENT_TYPE_2_BDRY,
                                                              d_U_bc_coefs);
             HierarchyGhostCellInterpolation U_bdry_bc_fill_op;
@@ -1753,7 +1753,7 @@ INSVCStaggeredHierarchyIntegrator::resetHierarchyConfigurationSpecialized(
                                                      DATA_REFINE_TYPE,
                                                      USE_CF_INTERPOLATION,
                                                      DATA_COARSEN_TYPE,
-                                                     d_bdry_extrap_type,
+                                                     d_bdry_extrap_type, // TODO: update variable name
                                                      CONSISTENT_TYPE_2_BDRY,
                                                      d_U_bc_coefs);
     d_U_bdry_bc_fill_op = new HierarchyGhostCellInterpolation();
@@ -1763,7 +1763,7 @@ INSVCStaggeredHierarchyIntegrator::resetHierarchyConfigurationSpecialized(
                                                      DATA_REFINE_TYPE,
                                                      USE_CF_INTERPOLATION,
                                                      DATA_COARSEN_TYPE,
-                                                     d_bdry_extrap_type,
+                                                     d_bdry_extrap_type, // TODO: update variable name
                                                      CONSISTENT_TYPE_2_BDRY,
                                                      d_P_bc_coef);
     d_P_bdry_bc_fill_op = new HierarchyGhostCellInterpolation();
@@ -1775,7 +1775,7 @@ INSVCStaggeredHierarchyIntegrator::resetHierarchyConfigurationSpecialized(
                                                          DATA_REFINE_TYPE,
                                                          USE_CF_INTERPOLATION,
                                                          DATA_COARSEN_TYPE,
-                                                         d_bdry_extrap_type,
+                                                         d_bdry_extrap_type, // TODO: update variable name
                                                          CONSISTENT_TYPE_2_BDRY);
         d_Q_bdry_bc_fill_op = new HierarchyGhostCellInterpolation();
         d_Q_bdry_bc_fill_op->initializeOperatorState(Q_bc_component, d_hierarchy);
@@ -1784,13 +1784,8 @@ INSVCStaggeredHierarchyIntegrator::resetHierarchyConfigurationSpecialized(
     if (!d_mu_is_const)
     {
         // These options are chosen to ensure that information is propagated conservatively from the coarse cells only
-        InterpolationTransactionComponent mu_bc_component(d_mu_scratch_idx,
-                                                          "CONSERVATIVE_LINEAR_REFINE",
-                                                          false,
-                                                          "CONSERVATIVE_COARSEN",
-                                                          "CONSTANT",
-                                                          false,
-                                                          d_mu_bc_coef);
+        InterpolationTransactionComponent mu_bc_component(
+            d_mu_scratch_idx, d_mu_refine_type, false, d_mu_coarsen_type, d_mu_bdry_extrap_type, false, d_mu_bc_coef);
         d_mu_bdry_bc_fill_op = new HierarchyGhostCellInterpolation();
         d_mu_bdry_bc_fill_op->initializeOperatorState(mu_bc_component, d_hierarchy);
     }
@@ -1798,7 +1793,7 @@ INSVCStaggeredHierarchyIntegrator::resetHierarchyConfigurationSpecialized(
     // Setup the patch boundary synchronization objects.
     using SynchronizationTransactionComponent = SideDataSynchronization::SynchronizationTransactionComponent;
     SynchronizationTransactionComponent synch_transaction =
-        SynchronizationTransactionComponent(d_U_scratch_idx, "CONSERVATIVE_COARSEN");
+        SynchronizationTransactionComponent(d_U_scratch_idx, d_U_coarsen_type);
     d_side_synch_op = new SideDataSynchronization();
     d_side_synch_op->initializeOperatorState(synch_transaction, d_hierarchy);
 

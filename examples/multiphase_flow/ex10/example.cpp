@@ -561,10 +561,6 @@ run_example(int argc, char* argv[])
             const int wgt_sc_idx = hier_math_ops.getSideWeightPatchDescriptorIndex();
             const double mass_fluid = hier_sc_data_ops.integral(rho_ins_idx, wgt_sc_idx);
 
-            VariableDatabase<NDIM>* var_db = VariableDatabase<NDIM>::getDatabase();
-            const int u_idx = var_db->mapVariableAndContextToIndex(navier_stokes_integrator->getVelocityVariable(),
-                                                                   navier_stokes_integrator->getCurrentContext());
-
             // Write to file
             if (!SAMRAI_MPI::getRank())
             {

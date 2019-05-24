@@ -181,6 +181,25 @@ IBHydrodynamicSurfaceForceEvaluator::IBHydrodynamicSurfaceForceEvaluator(
     d_mu =
         d_mu_is_const ? d_fluid_solver->getStokesSpecifications()->getMu() : std::numeric_limits<double>::quiet_NaN();
 
+    // Output data stream
+    // Set up the streams for printing drag and torque
+    if (SAMRAI_MPI::getRank() == 0)
+    {
+        bool from_restart = RestartManager::getManager()->isFromRestart();
+        if (from_restart)
+        {
+            d_hydro_force_stream.reset(
+                new std::ofstream("Hydro_Force_" + d_ls_solid_var->getName(), std::fstream::app));
+            d_hydro_force_stream->precision(10);
+        }
+        else
+        {
+            d_hydro_force_stream.reset(
+                new std::ofstream("Hydro_Force_" + d_ls_solid_var->getName(), std::fstream::out));
+            d_hydro_force_stream->precision(10);
+        }
+    }
+
     return;
 } // IBHydrodynamicSurfaceForceEvaluator
 
@@ -190,9 +209,10 @@ IBHydrodynamicSurfaceForceEvaluator::~IBHydrodynamicSurfaceForceEvaluator()
     var_db->removePatchDataIndex(d_ls_solid_idx);
     var_db->removePatchDataIndex(d_u_idx);
     var_db->removePatchDataIndex(d_p_idx);
-    var_db->removePatchDataIndex(d_mu_idx);
-    delete d_hydro_force_stream;
-    delete d_hydro_torque_stream;
+    if (!d_mu_is_const)
+    {
+        var_db->removePatchDataIndex(d_mu_idx);
+    }
 
     return;
 } // ~IBHydrodynamicSurfaceForceEvaluator
@@ -410,12 +430,12 @@ IBHydrodynamicSurfaceForceEvaluator::writeToFile(bool write_to_file)
         bool from_restart = RestartManager::getManager()->isFromRestart();
         if (from_restart)
         {
-            d_hydro_force_stream = new std::ofstream(force.c_str(), std::fstream::app);
+            d_hydro_force_stream.reset(new std::ofstream(force.c_str(), std::fstream::app));
             d_hydro_force_stream->precision(10);
         }
         else
         {
-            d_hydro_force_stream = new std::ofstream(force.c_str(), std::fstream::out);
+            d_hydro_force_stream.reset(new std::ofstream(force.c_str(), std::fstream::out));
             d_hydro_force_stream->precision(10);
         }
 
@@ -423,12 +443,12 @@ IBHydrodynamicSurfaceForceEvaluator::writeToFile(bool write_to_file)
         torque = "Hydro_Torque_" + d_ls_solid_var->getName();
         if (from_restart)
         {
-            d_hydro_torque_stream = new std::ofstream(torque.c_str(), std::fstream::app);
+            d_hydro_torque_stream.reset(new std::ofstream(torque.c_str(), std::fstream::app));
             d_hydro_torque_stream->precision(10);
         }
         else
         {
-            d_hydro_torque_stream = new std::ofstream(torque.c_str(), std::fstream::out);
+            d_hydro_torque_stream.reset(new std::ofstream(torque.c_str(), std::fstream::out));
             d_hydro_torque_stream->precision(10);
         }
     }

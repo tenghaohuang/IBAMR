@@ -82,7 +82,7 @@ public:
      * databases, and registers the integrator object with the restart manager
      * when requested.
      */
-    INSVCStaggeredConservativeHierarchyIntegrator(const std::string& object_name,
+    INSVCStaggeredConservativeHierarchyIntegrator(std::string object_name,
                                                   SAMRAI::tbox::Pointer<SAMRAI::tbox::Database> input_db,
                                                   bool register_for_restart = true);
 
@@ -144,11 +144,6 @@ public:
                                        double new_time,
                                        bool skip_synchronize_new_state_data,
                                        int num_cycles = 1) override;
-
-    /*!
-     * Regrid the patch hierarchy.
-     */
-    void regridHierarchy() override;
 
     /*!
      * Explicitly remove nullspace components from a solution vector.

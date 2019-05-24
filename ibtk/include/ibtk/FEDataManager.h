@@ -53,11 +53,13 @@
 #include "VariableContext.h"
 #include "boost/multi_array.hpp"
 #include "ibtk/QuadratureCache.h"
+#include "ibtk/SAMRAIDataCache.h"
 #include "ibtk/ibtk_utilities.h"
 #include "libmesh/dof_map.h"
 #include "libmesh/elem.h"
 #include "libmesh/enum_order.h"
 #include "libmesh/enum_quadrature_type.h"
+#include "libmesh/petsc_vector.h"
 #include "libmesh/system.h"
 #include "tbox/Pointer.h"
 #include "tbox/Serializable.h"
@@ -263,13 +265,13 @@ public:
      * \brief The libMesh boundary IDs to use for specifying essential boundary
      * conditions.
      */
-    static const short int ZERO_DISPLACEMENT_X_BDRY_ID;
-    static const short int ZERO_DISPLACEMENT_Y_BDRY_ID;
-    static const short int ZERO_DISPLACEMENT_Z_BDRY_ID;
-    static const short int ZERO_DISPLACEMENT_XY_BDRY_ID;
-    static const short int ZERO_DISPLACEMENT_XZ_BDRY_ID;
-    static const short int ZERO_DISPLACEMENT_YZ_BDRY_ID;
-    static const short int ZERO_DISPLACEMENT_XYZ_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_X_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_Y_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_Z_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_XY_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_XZ_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_YZ_BDRY_ID;
+    static const libMesh::boundary_id_type ZERO_DISPLACEMENT_XYZ_BDRY_ID;
 
     /*!
      * Return a pointer to the instance of the Lagrangian data manager
@@ -440,10 +442,24 @@ public:
 
     /*!
      * \return A pointer to the ghosted solution vector associated with the
-     * specified system.
+     * specified system. The vector contains positions for values in the
+     * relevant IB ghost region which are populated if @p localize_data is
+     * <code>true</code>.
+     *
+     * @note The vector returned by pointer is owned by this class (i.e., no
+     * copying is done).
+     *
+     * @deprecated Use buildIBGhostedVector instead which clones a vector with
+     * the same ghost region.
      */
     libMesh::NumericVector<double>* buildGhostedSolutionVector(const std::string& system_name,
                                                                bool localize_data = true);
+
+    /*!
+     * \return A pointer to a vector, with ghost entries corresponding to
+     * relevant IB data, associated with the specified system.
+     */
+    std::unique_ptr<libMesh::PetscVector<double> > buildIBGhostedVector(const std::string& system_name) const;
 
     /*!
      * \return A pointer to the unghosted coordinates (nodal position) vector.
@@ -452,6 +468,8 @@ public:
 
     /*!
      * \return A pointer to the ghosted coordinates (nodal position) vector.
+     *
+     * @deprecated Use buildIBGhostedVector() instead.
      */
     libMesh::NumericVector<double>* buildGhostedCoordsVector(bool localize_data = true);
 
@@ -496,11 +514,51 @@ public:
                      bool close_X = true);
 
     /*!
-     * \brief Interpolate a value from the Cartesian grid to the FE mesh using
-     * the default interpolation spec. This interpolation function does NOT do
-     * an L2-projection of the interpolated quantity. It does however weighs/filters
-     * the interpolated quantity at the quadrature points to the nodes. Here, the
-     * basis functions of the deformational field is used as the filter.
+     * \brief Set up the right-hand side @p F of an L2 projection problem
+     * where Eulerian data given by @p f_data_idx is projected onto the finite
+     * element space given by @p system_name.
+     *
+     * @param[in] f_data_idx Index of the variable being projected.
+     *
+     * @param[in] IB-ghosted position vector containing the current position
+     * of all dofs whose basis functions have support (in the deformed
+     * configuration) on the locally owned set of patches.
+     *
+     * @param[out] F Vector into which the L2-projection RHS vector will be
+     * assembled. If this vector is ghosted then off-processor entries are
+     * assembled into the ghost value region of the vector and callers should
+     * complete the assembly process with, e.g.,
+     * @code
+     * ierr = VecGhostUpdateBegin(F.vec(), ADD_VALUES, SCATTER_REVERSE);
+     * IBTK_CHKERRQ(ierr);
+     * ierr = VecGhostUpdateEnd(F.vec(), INSERT_VALUES, SCATTER_FORWARD);
+     * IBTK_CHKERRQ(ierr);
+     * @endcode
+     * otherwise values are added into the vector directly (which, for a
+     * libMesh::PetscVector, will involve the use of the PETSc VecCache object
+     * to track off-processor entries). It is strongly recommended, for
+     * performance reasons, that one assemble into a ghosted vector instead of
+     * the approach with VecCache.
+     *
+     * @param[in] system_name Name of the libMesh system corresponding to the
+     * vector @p F.
+     *
+     * @param[in] f_refine_scheds Refinement schedules to process before
+     * actually running this function.
+     *
+     * @param[in] fill_data_time Time at which the data in @p f_data_idx was filled.
+     *
+     * @param[in] Whether or not to close @p F after assembly.
+     *
+     * @param[in] Whether or not to close @p X before assembly.
+     *
+     * @note We recommend against using the last two booleans: it is usually
+     * better to do any vector communication before calling this function.
+     *
+     * @note This function is poorly named: it actually sets up a dual-space
+     * vector @p F which is the right-hand side of an L2 projection
+     * problem. Callers will still need to solve the resulting linear
+     * system. The result, therefore, is projected, not interpolated.
      */
     void
     interpWeighted(int f_data_idx,
@@ -875,6 +933,11 @@ private:
     int d_coarsest_ln = IBTK::invalid_level_number, d_finest_ln = IBTK::invalid_level_number;
 
     /*
+     * Cached Eulerian data to reduce the number of allocations/deallocations.
+     */
+    SAMRAIDataCache d_cached_eulerian_data;
+
+    /*
      * SAMRAI::hier::VariableContext object used for data management.
      */
     SAMRAI::tbox::Pointer<SAMRAI::hier::VariableContext> d_context;
@@ -948,6 +1011,13 @@ private:
      * Ghost vectors for the various equation systems.
      */
     std::map<std::string, std::unique_ptr<libMesh::NumericVector<double>>> d_system_ghost_vec;
+
+    /*
+     * Exemplar relevant IB-ghosted vectors for the various equation
+     * systems. These vectors are cloned for fast initialization in
+     * buildIBGhostedVector.
+     */
+    std::map<std::string, std::unique_ptr<libMesh::PetscVector<double> > > d_system_ib_ghost_vec;
 
     /*
      * Linear solvers and related data for performing interpolation in the IB-FE

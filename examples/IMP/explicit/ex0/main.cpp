@@ -174,12 +174,12 @@ main(int argc, char* argv[])
             Elem* const elem = *el;
             for (unsigned int side = 0; side < elem->n_sides(); ++side)
             {
-                const bool at_mesh_bdry = !elem->neighbor(side);
+                const bool at_mesh_bdry = !elem->neighbor_ptr(side);
                 if (!at_mesh_bdry) continue;
                 for (unsigned int k = 0; k < elem->n_nodes(); ++k)
                 {
                     if (!elem->is_node_on_side(k, side)) continue;
-                    Node& n = *elem->get_node(k);
+                    Node& n = elem->node_ref(k);
                     n = R * n.unit();
                 }
             }
@@ -256,12 +256,8 @@ main(int argc, char* argv[])
         {
             for (unsigned int d = 0; d < NDIM; ++d)
             {
-                ostringstream bc_coefs_name_stream;
-                bc_coefs_name_stream << "u_bc_coefs_" << d;
-                const string bc_coefs_name = bc_coefs_name_stream.str();
-                ostringstream bc_coefs_db_name_stream;
-                bc_coefs_db_name_stream << "VelocityBcCoefs_" << d;
-                const string bc_coefs_db_name = bc_coefs_db_name_stream.str();
+                const std::string bc_coefs_name = "u_bc_coefs_" + std::to_string(d);
+                const std::string bc_coefs_db_name = "VelocityBcCoefs_" + std::to_string(d);
                 u_bc_coefs[d] = new muParserRobinBcCoefs(
                     bc_coefs_name, app_initializer->getComponentDatabase(bc_coefs_db_name), grid_geometry);
             }
