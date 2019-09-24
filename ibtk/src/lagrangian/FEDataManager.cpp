@@ -1743,10 +1743,12 @@ FEDataManager::interpWeighted(const int f_data_idx,
                 const FEBase& F_fe = F_fe_cache(key, elem);
                 const QBase& qrule = d_fe_data->d_quadrature_cache[key];
                 FEMap& fe_map = fe_map_cache[key];
+                // JacobianCalculator& jac_calc = jacobian_calc_cache[key];
 
                 // JxW depends on the element
                 fe_map.compute_map(dim, qrule.get_weights(), elem, /*second derivatives*/ false);
                 const std::vector<double>& JxW_F = fe_map.get_JxW();
+                // const std::vector<double>& JxW_F = jac_calc.get_JxW(elem);
                 const std::vector<std::vector<double> >& phi_F = F_fe.get_phi();
 
                 const unsigned int n_qp = qrule.n_points();
