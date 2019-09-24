@@ -227,12 +227,11 @@ Hex8JacobianCalculator::get_JxW(const Elem* elem)
         const double x = d_quad_points[i](0);
         const double y = d_quad_points[i](1);
         const double z = d_quad_points[i](2);
-        
-        const double Jac_00 = a_1 + c_1 * y;
-        const double Jac_01 = b_1 + c_1 * x;
+        const double Jac_00 = 0;//a_1 + c_1 * y;
+        const double Jac_01 = 0;//b_1 + c_1 * x;
         const double Jac_02 = 0;
-        const double Jac_10 = a_2 + c_2 * y;
-        const double Jac_11 = b_2 + c_2 * x;
+        const double Jac_10 = 0;//a_2 + c_2 * y;
+        const double Jac_11 = 0;//b_2 + c_2 * x;
         const double Jac_12 = 0;
         const double Jac_20 = 0;
         const double Jac_21 = 0;
